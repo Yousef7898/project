@@ -1,4 +1,6 @@
 AI Tool Prompts
 ===============
+Tool: Claude Code (Anthropic), model Claude Opus 5, run in a terminal on the project VM.
+The prompts below are copied exactly as typed, in order.
 
 1. read the project and bring me the raytrace benchmark and nbody
