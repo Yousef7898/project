@@ -1,0 +1,7 @@
+$ python3 -m pyperf system tune
+$ python3 -m pyperformance run --rigorous -b raytrace -o /project/results/raytrace_original.json
+$ python3 -m pyperformance run --rigorous --manifest /project/raytrace/optimized/shadow_ray/MANIFEST -b raytrace -o /project/results/raytrace_shadow_ray.json
+$ python3 -m pyperformance run --rigorous --manifest /project/raytrace/optimized/sphere_floats/MANIFEST -b raytrace -o /project/results/raytrace_sphere_floats.json
+$ python3 -m pyperformance run --rigorous --manifest /project/raytrace/optimized/slots/MANIFEST -b raytrace -o /project/results/raytrace_slots.json
+$ python3 -m pyperformance run --rigorous --manifest /project/raytrace/optimized/combined/MANIFEST -b raytrace -o /project/results/raytrace_combined.json
+$ python3 -m pyperf system reset
