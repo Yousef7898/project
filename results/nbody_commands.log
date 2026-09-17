@@ -1,0 +1,14 @@
+$ python3 -m pyperf system tune
+$ python3 -m pyperformance run --rigorous -b nbody -o /project/results/nbody_original.json
+$ python3 -m pyperformance run --rigorous --manifest /project/nbody/optimized/locals/MANIFEST -b nbody -o /project/results/nbody_locals.json
+$ python3 -m pyperformance run --rigorous --manifest /project/nbody/optimized/sqrt/MANIFEST -b nbody -o /project/results/nbody_sqrt.json
+$ python3 -m pyperformance run --rigorous --manifest /project/nbody/optimized/both/MANIFEST -b nbody -o /project/results/nbody_both.json
+$ python3 -m pyperf system reset
+
+# --- round 2: sqrt as a local (default argument) on top of locals ---
+$ python3 -m pyperf system tune
+$ python3 -m pyperformance run --rigorous -b nbody -o /project/results/nbody_r2_original.json
+$ python3 -m pyperformance run --rigorous --manifest /project/nbody/optimized/locals/MANIFEST -b nbody -o /project/results/nbody_r2_locals.json
+$ python3 -m pyperformance run --rigorous --manifest /project/nbody/optimized/locals_sqrt/MANIFEST -b nbody -o /project/results/nbody_r2_locals_sqrt.json
+$ python3 -m pyperf system reset
+# result: locals_sqrt vs locals not significant (143 vs 144 ms median) -> reverted to ** ; locals_sqrt variant removed
