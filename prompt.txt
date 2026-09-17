@@ -4,3 +4,5 @@ Tool: Claude Code (Anthropic), model Claude Opus 5, run in a terminal on the pro
 The prompts below are copied exactly as typed, in order.
 
 1. read the project and bring me the raytrace benchmark and nbody
+
+2. ok claude we have read the code of nbody, now listen what we want from you is this , in nbody we have noticed the there is a lot of writing and reading from lists inide advance , mainly the velocites v1 and v2 and also the potistion , move them to local varibles at the start of advnace write them back to the lists , second enchamcnet we are thinking about is replacing ** with math.sqrt , since pow is a general fucntion and sqrt is p[timzed for its p+operation , so d2 ** )(-1.5) gets switched , keep the orignial floder untouched and put the changes in nbody/optimzed . do each change speratly and measure each one with pyprformance so we know how much every change gave us check the results stays the same , also show us what commands you ran for benchmakrs to make sure we are not missing anything
