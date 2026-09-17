@@ -1,16 +1,4 @@
 AI Tool Prompts
 ===============
-Tool: Claude Code (Anthropic), model Claude Opus 5, run in a terminal on the project VM.
-The prompts below are copied exactly as typed, in order.
 
---------------------------------------------------------------------
-1. Reading the assignment
---------------------------------------------------------------------
-read the Project pdf and tell me what we need to do, i think i arleady picked benchamrks just read it carfully and elts get to work
-
---------------------------------------------------------------------
-2. Choosing benchmarks
---------------------------------------------------------------------
-which of the benchmarks are the most easy and easy to enhance both of the two, give detalis about all the 13 benchmarks
-
-go nbody + raytrace first bring them here
+1. read the project and bring me the raytrace benchmark and nbody
