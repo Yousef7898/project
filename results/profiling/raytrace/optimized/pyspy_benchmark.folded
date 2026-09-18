@@ -1,0 +1,339 @@
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;visibleLights;L308: result.append(l) 1
+bench_raytrace;render;rayColour;colourAt;normalized;L64: return self.scale(1.0 / self.magnitude()) 4
+bench_raytrace;render;rayColour;colourAt;reflectThrough;scale;__init__;L29: self.z = initz 1
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;visibleLights;L307: if self._lightIsVisible(l, p): 1
+bench_raytrace;render;rayColour;colourAt;rayColour;firstIntersection;L228: candidateT = i[1] 1
+bench_raytrace;render;rayColour;colourAt;dot;L54: other.mustBeVector() 9
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;firstIntersection;L229: if candidateT is not None and candidateT > -EPSILON: 2
+bench_raytrace;render;rayColour;colourAt;visibleLights;_lightIsVisible;__sub__;__init__;L27: self.x = initx 1
+bench_raytrace;render;rayColour;colourAt;rayColour;<listcomp>;intersectionTime;L179: return 1 / -v 1
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;L345: c = addColours(c, self.lambertCoefficient * lambertAmount, b) 8
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;__sub__;__init__;L29: self.z = initz 1
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;addColours;L315: a[2] + scale * b[2]) 2
+bench_raytrace;render;rayColour;colourAt;L334: reflectedRay = Ray(p, ray.vector.reflectThrough(normal)) 6
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;addColours;L314: a[1] + scale * b[1], 2
+bench_raytrace;render;rayColour;firstIntersection;L228: candidateT = i[1] 29
+bench_raytrace;render;plot;L213: i = ((self.height - y - 1) * self.width + x) * 3 9
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;visibleLights;_lightIsVisible;L298: for (o, s) in self.objects: 4
+bench_raytrace;render;__init__;L190: self.point = point 4
+bench_raytrace;render;scale;__init__;L27: self.x = initx 11
+bench_raytrace;render;rayColour;colourAt;normalized;magnitude;dot;L55: return (self.x * other.x) + (self.y * other.y) + (self.z * other.z) 8
+bench_raytrace;render;__add__;L44: return Vector(self.x + other.x, self.y + other.y, self.z + other.z) 28
+bench_raytrace;render;__init__;normalized;scale;L51: return Vector(factor * self.x, factor * self.y, factor * self.z) 31
+bench_raytrace;render;rayColour;colourAt;visibleLights;_lightIsVisible;intersectionTime;L158: if discriminant < 0: 10
+bench_raytrace;render;rayColour;colourAt;rayColour;<listcomp>;intersectionTime;L177: v = ray.vector.dot(self.normal) 9
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;__init__;normalized;scale;L51: return Vector(factor * self.x, factor * self.y, factor * self.z) 2
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;rayColour;<listcomp>;intersectionTime;L154: cpz = centre.z - point.z 3
+bench_raytrace;render;rayColour;colourAt;__sub__;__init__;L27: self.x = initx 2
+bench_raytrace;render;rayColour;colourAt;visibleLights;_lightIsVisible;__init__;L191: self.vector = vector.normalized() 12
+bench_raytrace;render;rayColour;colourAt;rayColour;<listcomp>;intersectionTime;L152: cpx = centre.x - point.x 6
+bench_raytrace;render;rayColour;L281: try: 1
+bench_raytrace;render;rayColour;colourAt;L330: b = self.baseColourAt(p) 12
+bench_raytrace;render;rayColour;colourAt;normalized;scale;__init__;L27: self.x = initx 4
+bench_raytrace;render;rayColour;colourAt;L336: c = addColours(c, self.specularCoefficient, reflectedColour) 1
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;visibleLights;_lightIsVisible;L299: t = o.intersectionTime(ray) 2
+bench_raytrace;render;rayColour;pointAtTime;scale;L51: return Vector(factor * self.x, factor * self.y, factor * self.z) 7
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;L334: reflectedRay = Ray(p, ray.vector.reflectThrough(normal)) 1
+bench_raytrace;render;rayColour;colourAt;visibleLights;_lightIsVisible;L299: t = o.intersectionTime(ray) 71
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;__init__;normalized;magnitude;dot;L55: return (self.x * other.x) + (self.y * other.y) + (self.z * other.z) 1
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;<listcomp>;intersectionTime;L158: if discriminant < 0: 4
+bench_raytrace;render;__add__;__init__;L28: self.y = inity 4
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;<listcomp>;intersectionTime;L154: cpz = centre.z - point.z 7
+bench_raytrace;render;rayColour;colourAt;addColours;L313: return (a[0] + scale * b[0], 14
+bench_raytrace;render;rayColour;<listcomp>;intersectionTime;L153: cpy = centre.y - point.y 25
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;reflectThrough;__sub__;L48: return Vector(self.x - other.x, self.y - other.y, self.z - other.z) 4
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;rayColour;<listcomp>;L283: intersections = [(o, o.intersectionTime(ray), s) 4
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;visibleLights;_lightIsVisible;intersectionTime;L156: discriminant = (self.radius * self.radius) - ( 8
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;rayColour;<listcomp>;intersectionTime;L158: if discriminant < 0: 3
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;visibleLights;_lightIsVisible;intersectionTime;L157: (cpx * cpx) + (cpy * cpy) + (cpz * cpz) - v * v) 14
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;L336: c = addColours(c, self.specularCoefficient, reflectedColour) 3
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;visibleLights;_lightIsVisible;intersectionTime;L150: point = ray.point 1
+bench_raytrace;render;rayColour;colourAt;visibleLights;_lightIsVisible;L298: for (o, s) in self.objects: 21
+bench_raytrace;render;rayColour;colourAt;visibleLights;_lightIsVisible;__sub__;__init__;L28: self.y = inity 4
+bench_raytrace;render;rayColour;<listcomp>;intersectionTime;dot;L54: other.mustBeVector() 5
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;addColours;L313: return (a[0] + scale * b[0], 6
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;L342: if contribution > 0: 2
+bench_raytrace;render;rayColour;colourAt;visibleLights;_lightIsVisible;intersectionTime;L151: vector = ray.vector 11
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;L335: reflectedColour = scene.rayColour(reflectedRay) 2
+bench_raytrace;render;rayColour;colourAt;__init__;normalized;magnitude;dot;L55: return (self.x * other.x) + (self.y * other.y) + (self.z * other.z) 10
+bench_raytrace;render;rayColour;<listcomp>;intersectionTime;L157: (cpx * cpx) + (cpy * cpy) + (cpz * cpz) - v * v) 92
+bench_raytrace;render;rayColour;L286: if i is None: 1
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;<listcomp>;intersectionTime;L156: discriminant = (self.radius * self.radius) - ( 6
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;L344: lambertAmount = min(1, lambertAmount) 1
+bench_raytrace;render;rayColour;colourAt;visibleLights;_lightIsVisible;__sub__;__init__;L29: self.z = initz 4
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;visibleLights;_lightIsVisible;intersectionTime;dot;L54: other.mustBeVector() 1
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;visibleLights;_lightIsVisible;__init__;L191: self.vector = vector.normalized() 6
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;<listcomp>;intersectionTime;dot;L55: return (self.x * other.x) + (self.y * other.y) + (self.z * other.z) 1
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;L284: for (o, s) in self.objects] 1
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;L340: for lightPoint in scene.visibleLights(p): 2
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;visibleLights;_lightIsVisible;__init__;normalized;magnitude;L38: return math.sqrt(self.dot(self)) 1
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;L293: self.recursionDepth = self.recursionDepth - 1 4
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;reflectThrough;__sub__;__init__;L27: self.x = initx 3
+bench_raytrace;render;rayColour;colourAt;visibleLights;_lightIsVisible;__init__;normalized;scale;__init__;L27: self.x = initx 1
+bench_raytrace;render;rayColour;colourAt;visibleLights;_lightIsVisible;L300: if t is not None and t > EPSILON: 12
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;visibleLights;_lightIsVisible;intersectionTime;L153: cpy = centre.y - point.y 1
+bench_raytrace;render;rayColour;colourAt;__init__;L191: self.vector = vector.normalized() 6
+bench_raytrace;render;rayColour;firstIntersection;L230: if result is None or candidateT < result[1]: 1
+bench_raytrace;render;rayColour;colourAt;visibleLights;_lightIsVisible;intersectionTime;L177: v = ray.vector.dot(self.normal) 8
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;normalized;scale;L51: return Vector(factor * self.x, factor * self.y, factor * self.z) 2
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;L341: contribution = (lightPoint - p).normalized().dot(normal) 4
+bench_raytrace;render;rayColour;colourAt;baseColourAt;__sub__;__init__;L27: self.x = initx 1
+bench_raytrace;render;rayColour;<listcomp>;intersectionTime;L178: if v: 2
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;<listcomp>;intersectionTime;L161: return v - math.sqrt(discriminant) 5
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;visibleLights;_lightIsVisible;intersectionTime;L158: if discriminant < 0: 8
+bench_raytrace;render;rayColour;colourAt;rayColour;<listcomp>;intersectionTime;dot;L54: other.mustBeVector() 3
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;rayColour;firstIntersection;L232: return result 1
+bench_raytrace;__init__;L206: self.bytes = array.array('B', [0] * (width * height * 3)) 13
+bench_raytrace;render;rayColour;<listcomp>;intersectionTime;L155: v = (cpx * vector.x) + (cpy * vector.y) + (cpz * vector.z) 73
+bench_raytrace;render;rayColour;colourAt;visibleLights;_lightIsVisible;intersectionTime;L157: (cpx * cpx) + (cpy * cpy) + (cpz * cpz) - v * v) 51
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;visibleLights;_lightIsVisible;L299: t = o.intersectionTime(ray) 14
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;__init__;normalized;scale;__init__;L28: self.y = inity 4
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;baseColourAt;L364: + int(abs(v.y) + 0.5) 3
+bench_raytrace;render;__init__;normalized;L64: return self.scale(1.0 / self.magnitude()) 13
+bench_raytrace;render;rayColour;colourAt;rayColour;<listcomp>;intersectionTime;L156: discriminant = (self.radius * self.radius) - ( 4
+bench_raytrace;render;rayColour;colourAt;rayColour;normalAt;normalized;magnitude;L38: return math.sqrt(self.dot(self)) 1
+bench_raytrace;render;rayColour;colourAt;reflectThrough;__sub__;L47: other.mustBeVector() 5
+bench_raytrace;render;rayColour;colourAt;__sub__;__init__;L28: self.y = inity 3
+bench_raytrace;render;rayColour;colourAt;visibleLights;_lightIsVisible;intersectionTime;dot;L54: other.mustBeVector() 16
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;reflectThrough;dot;L54: other.mustBeVector() 3
+bench_raytrace;render;rayColour;colourAt;visibleLights;_lightIsVisible;intersectionTime;L150: point = ray.point 10
+bench_raytrace;render;rayColour;<listcomp>;intersectionTime;L149: centre = self.centre 15
+bench_raytrace;render;__init__;normalized;magnitude;L38: return math.sqrt(self.dot(self)) 16
+bench_raytrace;render;rayColour;colourAt;reflectThrough;scale;L51: return Vector(factor * self.x, factor * self.y, factor * self.z) 14
+bench_raytrace;render;rayColour;colourAt;__init__;normalized;L64: return self.scale(1.0 / self.magnitude()) 5
+bench_raytrace;render;rayColour;L285: i = firstIntersection(intersections) 1
+bench_raytrace;render;rayColour;colourAt;visibleLights;_lightIsVisible;__sub__;L118: if other.isPoint(): 7
+bench_raytrace;render;rayColour;colourAt;rayColour;<listcomp>;intersectionTime;L158: if discriminant < 0: 7
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;visibleLights;_lightIsVisible;intersectionTime;L159: return None 3
+bench_raytrace;render;rayColour;colourAt;baseColourAt;scale;__init__;L29: self.z = initz 2
+bench_raytrace;render;rayColour;colourAt;rayColour;<listcomp>;intersectionTime;L151: vector = ray.vector 5
+bench_raytrace;render;rayColour;colourAt;baseColourAt;__sub__;__init__;L29: self.z = initz 1
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;visibleLights;_lightIsVisible;L302: return True 1
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;firstIntersection;L227: for i in intersections: 3
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;L350: return c 1
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;reflectThrough;__sub__;L48: return Vector(self.x - other.x, self.y - other.y, self.z - other.z) 4
+bench_raytrace;render;rayColour;colourAt;visibleLights;_lightIsVisible;__init__;normalized;scale;__init__;L29: self.z = initz 1
+bench_raytrace;render;rayColour;pointAtTime;L197: return self.point + self.vector.scale(t) 9
+bench_raytrace;render;__init__;normalized;scale;__init__;L28: self.y = inity 2
+bench_raytrace;render;rayColour;colourAt;reflectThrough;L85: d = normal.scale(self.dot(normal)) 4
+bench_raytrace;render;rayColour;<listcomp>;intersectionTime;L152: cpx = centre.x - point.x 18
+bench_raytrace;render;rayColour;colourAt;addColours;L315: a[2] + scale * b[2]) 11
+bench_raytrace;render;rayColour;colourAt;visibleLights;_lightIsVisible;__init__;normalized;scale;__init__;L28: self.y = inity 2
+bench_raytrace;render;rayColour;colourAt;L339: lambertAmount = 0 1
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;visibleLights;_lightIsVisible;intersectionTime;L152: cpx = centre.x - point.x 1
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;__init__;normalized;magnitude;L38: return math.sqrt(self.dot(self)) 4
+bench_raytrace;render;scale;__init__;L29: self.z = initz 1
+bench_raytrace;render;rayColour;colourAt;normalized;scale;L51: return Vector(factor * self.x, factor * self.y, factor * self.z) 12
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;visibleLights;_lightIsVisible;L300: if t is not None and t > EPSILON: 3
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;addColours;L314: a[1] + scale * b[1], 3
+bench_raytrace;render;rayColour;colourAt;reflectThrough;dot;L54: other.mustBeVector() 1
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;visibleLights;_lightIsVisible;intersectionTime;L155: v = (cpx * vector.x) + (cpy * vector.y) + (cpz * vector.z) 12
+bench_raytrace;render;rayColour;colourAt;visibleLights;_lightIsVisible;__sub__;L119: return Vector(self.x - other.x, self.y - other.y, self.z - other.z) 23
+bench_raytrace;render;rayColour;<listcomp>;intersectionTime;L151: vector = ray.vector 8
+bench_raytrace;render;rayColour;colourAt;__init__;normalized;scale;__init__;L29: self.z = initz 4
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;<listcomp>;intersectionTime;L151: vector = ray.vector 1
+bench_raytrace;render;rayColour;colourAt;normalized;scale;__init__;L29: self.z = initz 5
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;visibleLights;_lightIsVisible;__init__;normalized;scale;__init__;L27: self.x = initx 2
+bench_raytrace;render;rayColour;<listcomp>;L283: intersections = [(o, o.intersectionTime(ray), s) 92
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;visibleLights;_lightIsVisible;__init__;normalized;magnitude;L38: return math.sqrt(self.dot(self)) 4
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;reflectThrough;L86: return self - d.scale(2) 2
+bench_raytrace;render;rayColour;colourAt;baseColourAt;__sub__;L119: return Vector(self.x - other.x, self.y - other.y, self.z - other.z) 13
+bench_raytrace;render;rayColour;colourAt;__init__;normalized;scale;L51: return Vector(factor * self.x, factor * self.y, factor * self.z) 15
+bench_raytrace;render;rayColour;<listcomp>;L284: for (o, s) in self.objects] 5
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;rayColour;pointAtTime;__add__;L114: other.mustBeVector() 1
+bench_raytrace;render;scale;L51: return Vector(factor * self.x, factor * self.y, factor * self.z) 28
+bench_raytrace;render;rayColour;colourAt;baseColourAt;L365: + int(abs(v.z) + 0.5)) % 2): 2
+bench_raytrace;render;rayColour;L283: intersections = [(o, o.intersectionTime(ray), s) 24
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;L345: c = addColours(c, self.lambertCoefficient * lambertAmount, b) 2
+bench_raytrace;render;rayColour;normalAt;normalized;magnitude;dot;L55: return (self.x * other.x) + (self.y * other.y) + (self.z * other.z) 1
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;visibleLights;_lightIsVisible;L297: ray = Ray(p, l - p) 8
+bench_raytrace;render;rayColour;L291: return s.colourAt(self, ray, p, o.normalAt(p)) 9
+bench_raytrace;render;rayColour;colourAt;rayColour;<listcomp>;intersectionTime;L153: cpy = centre.y - point.y 3
+bench_raytrace;render;rayColour;colourAt;baseColourAt;scale;L51: return Vector(factor * self.x, factor * self.y, factor * self.z) 5
+bench_raytrace;render;rayColour;colourAt;normalized;scale;__init__;L28: self.y = inity 1
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;<listcomp>;intersectionTime;L153: cpy = centre.y - point.y 7
+bench_raytrace;render;rayColour;colourAt;rayColour;<listcomp>;intersectionTime;L159: return None 1
+bench_raytrace;render;L276: canvas.plot(x, y, *colour) 25
+bench_raytrace;render;rayColour;colourAt;rayColour;L282: self.recursionDepth = self.recursionDepth + 1 13
+bench_raytrace;render;rayColour;colourAt;visibleLights;_lightIsVisible;intersectionTime;L179: return 1 / -v 3
+bench_raytrace;render;plot;L214: self.bytes[i] = max(0, min(255, int(r * 255))) 46
+bench_raytrace;render;rayColour;normalAt;L164: return (p - self.centre).normalized() 1
+bench_raytrace;render;rayColour;colourAt;visibleLights;_lightIsVisible;__init__;L190: self.point = point 3
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;__init__;normalized;scale;__init__;L27: self.x = initx 2
+bench_raytrace;render;rayColour;colourAt;rayColour;<listcomp>;L283: intersections = [(o, o.intersectionTime(ray), s) 48
+bench_raytrace;render;rayColour;colourAt;L345: c = addColours(c, self.lambertCoefficient * lambertAmount, b) 4
+bench_raytrace;render;rayColour;colourAt;reflectThrough;__sub__;L48: return Vector(self.x - other.x, self.y - other.y, self.z - other.z) 16
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;L333: if self.specularCoefficient > 0: 2
+bench_raytrace;render;rayColour;<listcomp>;intersectionTime;L154: cpz = centre.z - point.z 29
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;<listcomp>;intersectionTime;L155: v = (cpx * vector.x) + (cpy * vector.y) + (cpz * vector.z) 2
+bench_raytrace;render;rayColour;colourAt;rayColour;firstIntersection;L227: for i in intersections: 6
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;dot;L54: other.mustBeVector() 5
+bench_raytrace;render;rayColour;colourAt;rayColour;firstIntersection;L226: result = None 2
+bench_raytrace;render;rayColour;colourAt;__sub__;L118: if other.isPoint(): 3
+bench_raytrace;render;rayColour;<listcomp>;intersectionTime;L177: v = ray.vector.dot(self.normal) 5
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;visibleLights;_lightIsVisible;__init__;normalized;magnitude;dot;L54: other.mustBeVector() 1
+bench_raytrace;render;rayColour;colourAt;rayColour;<listcomp>;intersectionTime;L161: return v - math.sqrt(discriminant) 1
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;normalized;scale;__init__;L28: self.y = inity 1
+bench_raytrace;render;rayColour;colourAt;visibleLights;_lightIsVisible;intersectionTime;L152: cpx = centre.x - point.x 23
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;visibleLights;_lightIsVisible;intersectionTime;L157: (cpx * cpx) + (cpy * cpy) + (cpz * cpz) - v * v) 3
+bench_raytrace;render;rayColour;colourAt;rayColour;pointAtTime;L197: return self.point + self.vector.scale(t) 2
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;__init__;normalized;scale;__init__;L27: self.x = initx 1
+bench_raytrace;render;rayColour;colourAt;reflectThrough;__sub__;__init__;L27: self.x = initx 1
+bench_raytrace;render;rayColour;colourAt;rayColour;L283: intersections = [(o, o.intersectionTime(ray), s) 9
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;visibleLights;_lightIsVisible;__init__;normalized;magnitude;L38: return math.sqrt(self.dot(self)) 3
+bench_raytrace;render;rayColour;normalAt;__sub__;__init__;L28: self.y = inity 3
+bench_raytrace;render;rayColour;colourAt;L344: lambertAmount = min(1, lambertAmount) 13
+bench_raytrace;render;rayColour;<listcomp>;intersectionTime;L150: point = ray.point 11
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;reflectThrough;scale;L51: return Vector(factor * self.x, factor * self.y, factor * self.z) 3
+bench_raytrace;render;rayColour;colourAt;rayColour;<listcomp>;intersectionTime;L157: (cpx * cpx) + (cpy * cpy) + (cpz * cpz) - v * v) 32
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;<listcomp>;intersectionTime;L157: (cpx * cpx) + (cpy * cpy) + (cpz * cpz) - v * v) 10
+bench_raytrace;render;rayColour;colourAt;dot;L55: return (self.x * other.x) + (self.y * other.y) + (self.z * other.z) 8
+bench_raytrace;render;rayColour;colourAt;__sub__;__init__;L29: self.z = initz 3
+bench_raytrace;render;rayColour;pointAtTime;scale;__init__;L27: self.x = initx 2
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;normalized;magnitude;dot;L54: other.mustBeVector() 1
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;visibleLights;_lightIsVisible;__init__;normalized;magnitude;dot;L55: return (self.x * other.x) + (self.y * other.y) + (self.z * other.z) 8
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;__sub__;L119: return Vector(self.x - other.x, self.y - other.y, self.z - other.z) 3
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;visibleLights;_lightIsVisible;intersectionTime;L161: return v - math.sqrt(discriminant) 6
+bench_raytrace;render;rayColour;colourAt;rayColour;normalAt;normalized;L64: return self.scale(1.0 / self.magnitude()) 1
+bench_raytrace;render;rayColour;<listcomp>;intersectionTime;L179: return 1 / -v 5
+bench_raytrace;render;rayColour;colourAt;visibleLights;_lightIsVisible;intersectionTime;L154: cpz = centre.z - point.z 20
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;baseColourAt;__sub__;isPoint;L127: return True 2
+bench_raytrace;render;rayColour;pointAtTime;__add__;L115: return Point(self.x + other.x, self.y + other.y, self.z + other.z) 6
+bench_raytrace;render;rayColour;colourAt;rayColour;pointAtTime;__add__;L115: return Point(self.x + other.x, self.y + other.y, self.z + other.z) 2
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;addColours;L313: return (a[0] + scale * b[0], 4
+bench_raytrace;render;rayColour;colourAt;L348: c = addColours(c, self.ambientCoefficient, b) 6
+bench_raytrace;render;__add__;L41: if other.isPoint(): 9
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;visibleLights;_lightIsVisible;intersectionTime;L152: cpx = centre.x - point.x 5
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;visibleLights;_lightIsVisible;intersectionTime;L152: cpx = centre.x - point.x 1
+bench_raytrace;render;rayColour;colourAt;rayColour;<listcomp>;intersectionTime;dot;L55: return (self.x * other.x) + (self.y * other.y) + (self.z * other.z) 8
+bench_raytrace;render;rayColour;firstIntersection;L226: result = None 5
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;rayColour;<listcomp>;intersectionTime;dot;L55: return (self.x * other.x) + (self.y * other.y) + (self.z * other.z) 2
+bench_raytrace;__init__;L208: self.bytes[i * 3 + 2] = 255 12
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;visibleLights;_lightIsVisible;__sub__;__init__;L29: self.z = initz 1
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;normalized;magnitude;L38: return math.sqrt(self.dot(self)) 1
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;normalized;magnitude;dot;L55: return (self.x * other.x) + (self.y * other.y) + (self.z * other.z) 6
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;visibleLights;_lightIsVisible;__init__;normalized;L64: return self.scale(1.0 / self.magnitude()) 1
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;L344: lambertAmount = min(1, lambertAmount) 2
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;normalized;L64: return self.scale(1.0 / self.magnitude()) 1
+bench_raytrace;render;L273: ycomp = vpUp.scale(y * pixelHeight - halfHeight) 13
+bench_raytrace;render;rayColour;colourAt;baseColourAt;L362: v.scale(1.0 / self.checkSize) 4
+bench_raytrace;render;__init__;L191: self.vector = vector.normalized() 16
+bench_raytrace;render;rayColour;firstIntersection;L227: for i in intersections: 9
+bench_raytrace;render;rayColour;colourAt;visibleLights;_lightIsVisible;__init__;normalized;scale;L51: return Vector(factor * self.x, factor * self.y, factor * self.z) 19
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;rayColour;<listcomp>;intersectionTime;L155: v = (cpx * vector.x) + (cpy * vector.y) + (cpz * vector.z) 9
+bench_raytrace;render;rayColour;colourAt;__init__;normalized;magnitude;dot;L54: other.mustBeVector() 6
+bench_raytrace;render;rayColour;colourAt;normalized;magnitude;L38: return math.sqrt(self.dot(self)) 7
+bench_raytrace;render;rayColour;colourAt;rayColour;L291: return s.colourAt(self, ray, p, o.normalAt(p)) 2
+bench_raytrace;render;rayColour;colourAt;rayColour;normalAt;normalized;magnitude;dot;L55: return (self.x * other.x) + (self.y * other.y) + (self.z * other.z) 1
+bench_raytrace;render;rayColour;colourAt;L342: if contribution > 0: 1
+bench_raytrace;render;rayColour;<listcomp>;intersectionTime;L161: return v - math.sqrt(discriminant) 1
+bench_raytrace;render;rayColour;colourAt;visibleLights;_lightIsVisible;intersectionTime;dot;L55: return (self.x * other.x) + (self.y * other.y) + (self.z * other.z) 5
+bench_raytrace;render;rayColour;<listcomp>;intersectionTime;dot;L55: return (self.x * other.x) + (self.y * other.y) + (self.z * other.z) 14
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;visibleLights;_lightIsVisible;intersectionTime;L159: return None 1
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;visibleLights;_lightIsVisible;L300: if t is not None and t > EPSILON: 1
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;visibleLights;_lightIsVisible;intersectionTime;L158: if discriminant < 0: 1
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;visibleLights;_lightIsVisible;L299: t = o.intersectionTime(ray) 14
+bench_raytrace;render;rayColour;pointAtTime;scale;__init__;L29: self.z = initz 1
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;visibleLights;L308: result.append(l) 1
+bench_raytrace;render;rayColour;firstIntersection;L229: if candidateT is not None and candidateT > -EPSILON: 8
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;L334: reflectedRay = Ray(p, ray.vector.reflectThrough(normal)) 1
+bench_raytrace;render;rayColour;colourAt;visibleLights;_lightIsVisible;L297: ray = Ray(p, l - p) 31
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;<listcomp>;L283: intersections = [(o, o.intersectionTime(ray), s) 14
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;visibleLights;_lightIsVisible;__sub__;isPoint;L127: return True 2
+bench_raytrace;render;rayColour;colourAt;L343: lambertAmount = lambertAmount + contribution 2
+bench_raytrace;render;rayColour;<listcomp>;intersectionTime;L158: if discriminant < 0: 25
+bench_raytrace;render;rayColour;colourAt;rayColour;firstIntersection;L229: if candidateT is not None and candidateT > -EPSILON: 12
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;visibleLights;_lightIsVisible;intersectionTime;L154: cpz = centre.z - point.z 4
+bench_raytrace;render;rayColour;L282: self.recursionDepth = self.recursionDepth + 1 5
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;visibleLights;L306: for l in self.lightPoints: 1
+bench_raytrace;render;rayColour;colourAt;L340: for lightPoint in scene.visibleLights(p): 11
+bench_raytrace;render;rayColour;colourAt;visibleLights;_lightIsVisible;__init__;normalized;L64: return self.scale(1.0 / self.magnitude()) 4
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;L341: contribution = (lightPoint - p).normalized().dot(normal) 3
+bench_raytrace;render;rayColour;colourAt;rayColour;L285: i = firstIntersection(intersections) 3
+bench_raytrace;render;__add__;__init__;L27: self.x = initx 9
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;baseColourAt;L363: if ((int(abs(v.x) + 0.5) 4
+bench_raytrace;render;rayColour;colourAt;addColours;L314: a[1] + scale * b[1], 1
+bench_raytrace;render;rayColour;colourAt;L335: reflectedColour = scene.rayColour(reflectedRay) 5
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;visibleLights;_lightIsVisible;L297: ray = Ray(p, l - p) 2
+bench_raytrace;render;rayColour;L290: p = ray.pointAtTime(t) 2
+bench_raytrace;render;L275: colour = self.rayColour(ray) 24
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;__init__;normalized;L64: return self.scale(1.0 / self.magnitude()) 1
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;visibleLights;_lightIsVisible;intersectionTime;L161: return v - math.sqrt(discriminant) 3
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;__sub__;__init__;L29: self.z = initz 1
+bench_raytrace;render;rayColour;colourAt;rayColour;L293: self.recursionDepth = self.recursionDepth - 1 3
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;<listcomp>;intersectionTime;L149: centre = self.centre 4
+bench_raytrace;render;L274: ray = Ray(eye.point, eye.vector + xcomp + ycomp) 36
+bench_raytrace;render;rayColour;colourAt;visibleLights;_lightIsVisible;intersectionTime;L153: cpy = centre.y - point.y 23
+bench_raytrace;render;rayColour;colourAt;L347: if self.ambientCoefficient > 0: 4
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;L340: for lightPoint in scene.visibleLights(p): 2
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;baseColourAt;L368: return self.baseColour 2
+bench_raytrace;render;plot;L216: self.bytes[i + 2] = max(0, min(255, int(b * 255))) 30
+bench_raytrace;render;plot;L215: self.bytes[i + 1] = max(0, min(255, int(g * 255))) 47
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;visibleLights;_lightIsVisible;__sub__;L119: return Vector(self.x - other.x, self.y - other.y, self.z - other.z) 6
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;rayColour;<listcomp>;intersectionTime;L157: (cpx * cpx) + (cpy * cpy) + (cpz * cpz) - v * v) 7
+bench_raytrace;render;rayColour;colourAt;rayColour;<listcomp>;intersectionTime;L149: centre = self.centre 6
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;visibleLights;_lightIsVisible;L298: for (o, s) in self.objects: 2
+bench_raytrace;render;rayColour;colourAt;visibleLights;_lightIsVisible;intersectionTime;L156: discriminant = (self.radius * self.radius) - ( 26
+bench_raytrace;render;rayColour;<listcomp>;intersectionTime;L156: discriminant = (self.radius * self.radius) - ( 47
+bench_raytrace;render;rayColour;L279: if self.recursionDepth > 3: 8
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;visibleLights;L307: if self._lightIsVisible(l, p): 3
+bench_raytrace;render;rayColour;colourAt;__init__;normalized;magnitude;L38: return math.sqrt(self.dot(self)) 4
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;rayColour;L293: self.recursionDepth = self.recursionDepth - 1 2
+bench_raytrace;render;rayColour;colourAt;baseColourAt;L363: if ((int(abs(v.x) + 0.5) 5
+bench_raytrace;render;__add__;__init__;L29: self.z = initz 1
+bench_raytrace;render;rayColour;colourAt;visibleLights;_lightIsVisible;__init__;normalized;magnitude;dot;L54: other.mustBeVector() 2
+bench_raytrace;render;rayColour;L293: self.recursionDepth = self.recursionDepth - 1 11
+bench_raytrace;render;rayColour;colourAt;visibleLights;_lightIsVisible;__init__;normalized;magnitude;dot;L55: return (self.x * other.x) + (self.y * other.y) + (self.z * other.z) 17
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;visibleLights;_lightIsVisible;__sub__;L118: if other.isPoint(): 1
+bench_raytrace;render;rayColour;colourAt;reflectThrough;dot;L55: return (self.x * other.x) + (self.y * other.y) + (self.z * other.z) 7
+bench_raytrace;render;rayColour;colourAt;reflectThrough;L86: return self - d.scale(2) 7
+bench_raytrace;render;rayColour;<listcomp>;intersectionTime;dot;mustBeVector;L79: return self 2
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;L279: if self.recursionDepth > 3: 2
+bench_raytrace;render;rayColour;colourAt;rayColour;<listcomp>;intersectionTime;L150: point = ray.point 5
+bench_raytrace;render;rayColour;colourAt;visibleLights;_lightIsVisible;intersectionTime;L155: v = (cpx * vector.x) + (cpy * vector.y) + (cpz * vector.z) 42
+bench_raytrace;render;rayColour;colourAt;baseColourAt;__sub__;L118: if other.isPoint(): 5
+bench_raytrace;render;rayColour;colourAt;L333: if self.specularCoefficient > 0: 1
+bench_raytrace;render;rayColour;firstIntersection;L232: return result 1
+bench_raytrace;render;rayColour;colourAt;visibleLights;L307: if self._lightIsVisible(l, p): 10
+bench_raytrace;render;rayColour;pointAtTime;__add__;__init__;L103: self.x = initx 1
+bench_raytrace;render;rayColour;colourAt;visibleLights;_lightIsVisible;__init__;normalized;magnitude;L38: return math.sqrt(self.dot(self)) 9
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;reflectThrough;scale;L51: return Vector(factor * self.x, factor * self.y, factor * self.z) 2
+bench_raytrace;render;rayColour;colourAt;dot;mustBeVector;L79: return self 1
+bench_raytrace;render;rayColour;colourAt;__init__;L190: self.point = point 2
+bench_raytrace;render;rayColour;colourAt;visibleLights;_lightIsVisible;intersectionTime;L149: centre = self.centre 19
+bench_raytrace;render;rayColour;colourAt;rayColour;pointAtTime;scale;L51: return Vector(factor * self.x, factor * self.y, factor * self.z) 1
+bench_raytrace;render;__init__;normalized;magnitude;dot;L54: other.mustBeVector() 12
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;normalized;L64: return self.scale(1.0 / self.magnitude()) 17
+bench_raytrace;render;rayColour;colourAt;L341: contribution = (lightPoint - p).normalized().dot(normal) 16
+bench_raytrace;render;rayColour;colourAt;rayColour;pointAtTime;scale;__init__;L29: self.z = initz 1
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;visibleLights;_lightIsVisible;intersectionTime;L149: centre = self.centre 2
+bench_raytrace;render;rayColour;<listcomp>;intersectionTime;L159: return None 6
+bench_raytrace;render;rayColour;colourAt;baseColourAt;L361: v = p - Point.ZERO 9
+bench_raytrace;render;rayColour;colourAt;baseColourAt;L364: + int(abs(v.y) + 0.5) 3
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;__sub__;L119: return Vector(self.x - other.x, self.y - other.y, self.z - other.z) 3
+bench_raytrace;render;rayColour;colourAt;normalized;magnitude;dot;L54: other.mustBeVector() 4
+bench_raytrace;render;rayColour;colourAt;__sub__;L119: return Vector(self.x - other.x, self.y - other.y, self.z - other.z) 16
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;visibleLights;_lightIsVisible;__init__;normalized;scale;L51: return Vector(factor * self.x, factor * self.y, factor * self.z) 3
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;visibleLights;_lightIsVisible;__sub__;isPoint;L127: return True 3
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;visibleLights;_lightIsVisible;intersectionTime;L150: point = ray.point 9
+bench_raytrace;render;rayColour;colourAt;rayColour;<listcomp>;L284: for (o, s) in self.objects] 7
+bench_raytrace;render;rayColour;colourAt;rayColour;<listcomp>;intersectionTime;L154: cpz = centre.z - point.z 9
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;visibleLights;_lightIsVisible;__init__;L191: self.vector = vector.normalized() 1
+bench_raytrace;render;__init__;normalized;magnitude;dot;L55: return (self.x * other.x) + (self.y * other.y) + (self.z * other.z) 11
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;normalized;magnitude;dot;L55: return (self.x * other.x) + (self.y * other.y) + (self.z * other.z) 7
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;<listcomp>;intersectionTime;L177: v = ray.vector.dot(self.normal) 3
+bench_raytrace;render;rayColour;colourAt;baseColourAt;L366: return self.otherColour 1
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;normalized;scale;L51: return Vector(factor * self.x, factor * self.y, factor * self.z) 2
+bench_raytrace;render;scale;__init__;L28: self.y = inity 2
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;visibleLights;_lightIsVisible;__init__;normalized;scale;L51: return Vector(factor * self.x, factor * self.y, factor * self.z) 2
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;normalized;scale;__init__;L28: self.y = inity 1
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;visibleLights;_lightIsVisible;intersectionTime;L155: v = (cpx * vector.x) + (cpy * vector.y) + (cpz * vector.z) 20
+bench_raytrace;render;L272: xcomp = vpRight.scale(x * pixelWidth - halfWidth) 11
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;colourAt;visibleLights;_lightIsVisible;intersectionTime;L157: (cpx * cpx) + (cpy * cpy) + (cpz * cpz) - v * v) 4
+bench_raytrace;render;rayColour;colourAt;visibleLights;_lightIsVisible;__sub__;isPoint;L127: return True 2
+bench_raytrace;render;rayColour;colourAt;visibleLights;L306: for l in self.lightPoints: 2
+bench_raytrace;render;rayColour;colourAt;rayColour;<listcomp>;intersectionTime;L155: v = (cpx * vector.x) + (cpy * vector.y) + (cpz * vector.z) 36
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;baseColourAt;L363: if ((int(abs(v.x) + 0.5) 1
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;L335: reflectedColour = scene.rayColour(reflectedRay) 7
+bench_raytrace;render;rayColour;colourAt;L350: return c 1
+bench_raytrace;render;rayColour;colourAt;rayColour;colourAt;rayColour;<listcomp>;intersectionTime;L179: return 1 / -v 4

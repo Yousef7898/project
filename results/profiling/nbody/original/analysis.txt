@@ -68,6 +68,42 @@ Bottlenecks and what they point to in the code
    -> Tested anyway ("sqrt", and sqrt as a local variable): 1.01x slower and
       not significant respectively, as the flame graph predicts. Dropped.
 
+Python-level flame graph (py-spy)
+---------------------------------
+pyspy_flamegraph.svg: py-spy samples Python's own frames at 500 Hz, so this
+flame graph shows Python function names, the call tree and, as the top box,
+the source line being executed (perf, sampling the interpreter's C code,
+cannot: CPython 3.10 has no frame pointers). Only samples inside
+bench_nbody are kept (99.4% of 4755; the rest is interpreter startup).
+
+The graph is flat by nature: bench_nbody -> advance, and advance calls no
+Python functions. All the information is in the top row, the source lines
+of advance() (share of run time, 4725 samples):
+
+   18.3%  L85  mag = dt * ((dx * dx + dy * dy + dz * dz) ** (-1.5))
+    7.5%  L88  v1[0] -= dx * b2m
+    8.0%  L89  v1[1] -= dy * b2m
+    7.9%  L90  v1[2] -= dz * b2m
+    7.9%  L91  v2[0] += dx * b1m
+    6.6%  L92  v2[1] += dy * b1m
+   10.4%  L93  v2[2] += dz * b1m        L88-L93 together: 48.3%
+    8.4%  L80-81  for (([x1, y1, z1], v1, m1), ([x2, ...], v2, m2)) in pairs
+   10.6%  L95-97  r[0] += dt * vx, r[1] += ..., r[2] += ...
+
+Almost 60% of the run time is on lines that read and write list elements
+(velocity and position updates): the C-level flame graph's "list indexing"
+plus the float work around it, now pinned to the source.
+-> direct evidence for the "locals" optimization. In the optimized flame
+   graph no single line is above 3.5%: the time is spread evenly over the
+   (unrolled) float arithmetic.
+L85 (18.3%) is the force formula itself: float arithmetic that only
+hardware can make much cheaper (see hw/nbody_accel).
+
+Why py-spy and perf give different percentages: py-spy charges a Python
+line with everything the interpreter does for it (dispatch, float objects,
+arithmetic, list access), while perf splits the same time by C function.
+Both views agree on where the time goes; they just slice it differently.
+
 Hardware counters (perf_stat.txt, same fixed work)
 --------------------------------------------------
   instructions 8.71 B, 2.94 instructions per cycle, branch misses 0.37%,

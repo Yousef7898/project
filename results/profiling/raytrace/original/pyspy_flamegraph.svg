@@ -1,0 +1,2843 @@
+<?xml version="1.0" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg version="1.1" width="1200" height="382" onload="init(evt)" viewBox="0 0 1200 382" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<!-- Flame graph stack visualization. See https://github.com/brendangregg/FlameGraph for latest version, and http://www.brendangregg.com/flamegraphs.html for examples. -->
+<!-- NOTES:  -->
+<defs>
+	<linearGradient id="background" y1="0" y2="1" x1="0" x2="0" >
+		<stop stop-color="#eeeeee" offset="5%" />
+		<stop stop-color="#eeeeb0" offset="95%" />
+	</linearGradient>
+</defs>
+<style type="text/css">
+	text { font-family:Verdana; font-size:12px; fill:rgb(0,0,0); }
+	#search, #ignorecase { opacity:0.1; cursor:pointer; }
+	#search:hover, #search.show, #ignorecase:hover, #ignorecase.show { opacity:1; }
+	#subtitle { text-anchor:middle; font-color:rgb(160,160,160); }
+	#title { text-anchor:middle; font-size:17px}
+	#unzoom { cursor:pointer; }
+	#frames > *:hover { stroke:black; stroke-width:0.5; cursor:pointer; }
+	.hide { display:none; }
+	.parent { opacity:0.5; }
+</style>
+<script type="text/ecmascript">
+<![CDATA[
+	"use strict";
+	var details, searchbtn, unzoombtn, matchedtxt, svg, searching, currentSearchTerm, ignorecase, ignorecaseBtn;
+	function init(evt) {
+		details = document.getElementById("details").firstChild;
+		searchbtn = document.getElementById("search");
+		ignorecaseBtn = document.getElementById("ignorecase");
+		unzoombtn = document.getElementById("unzoom");
+		matchedtxt = document.getElementById("matched");
+		svg = document.getElementsByTagName("svg")[0];
+		searching = 0;
+		currentSearchTerm = null;
+
+		// use GET parameters to restore a flamegraphs state.
+		var params = get_params();
+		if (params.x && params.y)
+			zoom(find_group(document.querySelector('[x="' + params.x + '"][y="' + params.y + '"]')));
+                if (params.s) search(params.s);
+	}
+
+	// event listeners
+	window.addEventListener("click", function(e) {
+		var target = find_group(e.target);
+		if (target) {
+			if (target.nodeName == "a") {
+				if (e.ctrlKey === false) return;
+				e.preventDefault();
+			}
+			if (target.classList.contains("parent")) unzoom(true);
+			zoom(target);
+			if (!document.querySelector('.parent')) {
+				// we have basically done a clearzoom so clear the url
+				var params = get_params();
+				if (params.x) delete params.x;
+				if (params.y) delete params.y;
+				history.replaceState(null, null, parse_params(params));
+				unzoombtn.classList.add("hide");
+				return;
+			}
+
+			// set parameters for zoom state
+			var el = target.querySelector("rect");
+			if (el && el.attributes && el.attributes.y && el.attributes._orig_x) {
+				var params = get_params()
+				params.x = el.attributes._orig_x.value;
+				params.y = el.attributes.y.value;
+				history.replaceState(null, null, parse_params(params));
+			}
+		}
+		else if (e.target.id == "unzoom") clearzoom();
+		else if (e.target.id == "search") search_prompt();
+		else if (e.target.id == "ignorecase") toggle_ignorecase();
+	}, false)
+
+	// mouse-over for info
+	// show
+	window.addEventListener("mouseover", function(e) {
+		var target = find_group(e.target);
+		if (target) details.nodeValue = "Function: " + g_to_text(target);
+	}, false)
+
+	// clear
+	window.addEventListener("mouseout", function(e) {
+		var target = find_group(e.target);
+		if (target) details.nodeValue = ' ';
+	}, false)
+
+	// ctrl-F for search
+	// ctrl-I to toggle case-sensitive search
+	window.addEventListener("keydown",function (e) {
+		if (e.keyCode === 114 || (e.ctrlKey && e.keyCode === 70)) {
+			e.preventDefault();
+			search_prompt();
+		}
+		else if (e.ctrlKey && e.keyCode === 73) {
+			e.preventDefault();
+			toggle_ignorecase();
+		}
+	}, false)
+
+	// functions
+	function get_params() {
+		var params = {};
+		var paramsarr = window.location.search.substr(1).split('&');
+		for (var i = 0; i < paramsarr.length; ++i) {
+			var tmp = paramsarr[i].split("=");
+			if (!tmp[0] || !tmp[1]) continue;
+			params[tmp[0]]  = decodeURIComponent(tmp[1]);
+		}
+		return params;
+	}
+	function parse_params(params) {
+		var uri = "?";
+		for (var key in params) {
+			uri += key + '=' + encodeURIComponent(params[key]) + '&';
+		}
+		if (uri.slice(-1) == "&")
+			uri = uri.substring(0, uri.length - 1);
+		if (uri == '?')
+			uri = window.location.href.split('?')[0];
+		return uri;
+	}
+	function find_child(node, selector) {
+		var children = node.querySelectorAll(selector);
+		if (children.length) return children[0];
+	}
+	function find_group(node) {
+		var parent = node.parentElement;
+		if (!parent) return;
+		if (parent.id == "frames") return node;
+		return find_group(parent);
+	}
+	function orig_save(e, attr, val) {
+		if (e.attributes["_orig_" + attr] != undefined) return;
+		if (e.attributes[attr] == undefined) return;
+		if (val == undefined) val = e.attributes[attr].value;
+		e.setAttribute("_orig_" + attr, val);
+	}
+	function orig_load(e, attr) {
+		if (e.attributes["_orig_"+attr] == undefined) return;
+		e.attributes[attr].value = e.attributes["_orig_" + attr].value;
+		e.removeAttribute("_orig_"+attr);
+	}
+	function g_to_text(e) {
+		var text = find_child(e, "title").firstChild.nodeValue;
+		return (text)
+	}
+	function g_to_func(e) {
+		var func = g_to_text(e);
+		// if there's any manipulation we want to do to the function
+		// name before it's searched, do it here before returning.
+		return (func);
+	}
+	function update_text(e) {
+		var r = find_child(e, "rect");
+		var t = find_child(e, "text");
+		var w = parseFloat(r.attributes.width.value) -3;
+		var txt = find_child(e, "title").textContent.replace(/\([^(]*\)$/,"");
+		t.attributes.x.value = parseFloat(r.attributes.x.value) + 3;
+
+		// Smaller than this size won't fit anything
+		if (w < 2 * 12 * 0.59) {
+			t.textContent = "";
+			return;
+		}
+
+		t.textContent = txt;
+		var sl = t.getSubStringLength(0, txt.length);
+		// check if only whitespace or if we can fit the entire string into width w
+		if (/^ *$/.test(txt) || sl < w)
+			return;
+
+		// this isn't perfect, but gives a good starting point
+		// and avoids calling getSubStringLength too often
+		var start = Math.floor((w/sl) * txt.length);
+		for (var x = start; x > 0; x = x-2) {
+			if (t.getSubStringLength(0, x + 2) <= w) {
+				t.textContent = txt.substring(0, x) + "..";
+				return;
+			}
+		}
+		t.textContent = "";
+	}
+
+	// zoom
+	function zoom_reset(e) {
+		if (e.attributes != undefined) {
+			orig_load(e, "x");
+			orig_load(e, "width");
+		}
+		if (e.childNodes == undefined) return;
+		for (var i = 0, c = e.childNodes; i < c.length; i++) {
+			zoom_reset(c[i]);
+		}
+	}
+	function zoom_child(e, x, ratio) {
+		if (e.attributes != undefined) {
+			if (e.attributes.x != undefined) {
+				orig_save(e, "x");
+				e.attributes.x.value = (parseFloat(e.attributes.x.value) - x - 10) * ratio + 10;
+				if (e.tagName == "text")
+					e.attributes.x.value = find_child(e.parentNode, "rect[x]").attributes.x.value + 3;
+			}
+			if (e.attributes.width != undefined) {
+				orig_save(e, "width");
+				e.attributes.width.value = parseFloat(e.attributes.width.value) * ratio;
+			}
+		}
+
+		if (e.childNodes == undefined) return;
+		for (var i = 0, c = e.childNodes; i < c.length; i++) {
+			zoom_child(c[i], x - 10, ratio);
+		}
+	}
+	function zoom_parent(e) {
+		if (e.attributes) {
+			if (e.attributes.x != undefined) {
+				orig_save(e, "x");
+				e.attributes.x.value = 10;
+			}
+			if (e.attributes.width != undefined) {
+				orig_save(e, "width");
+				e.attributes.width.value = parseInt(svg.width.baseVal.value) - (10 * 2);
+			}
+		}
+		if (e.childNodes == undefined) return;
+		for (var i = 0, c = e.childNodes; i < c.length; i++) {
+			zoom_parent(c[i]);
+		}
+	}
+	function zoom(node) {
+		var attr = find_child(node, "rect").attributes;
+		var width = parseFloat(attr.width.value);
+		var xmin = parseFloat(attr.x.value);
+		var xmax = parseFloat(xmin + width);
+		var ymin = parseFloat(attr.y.value);
+		var ratio = (svg.width.baseVal.value - 2 * 10) / width;
+
+		// XXX: Workaround for JavaScript float issues (fix me)
+		var fudge = 0.0001;
+
+		unzoombtn.classList.remove("hide");
+
+		var el = document.getElementById("frames").children;
+		for (var i = 0; i < el.length; i++) {
+			var e = el[i];
+			var a = find_child(e, "rect").attributes;
+			var ex = parseFloat(a.x.value);
+			var ew = parseFloat(a.width.value);
+			var upstack;
+			// Is it an ancestor
+			if (0 == 0) {
+				upstack = parseFloat(a.y.value) > ymin;
+			} else {
+				upstack = parseFloat(a.y.value) < ymin;
+			}
+			if (upstack) {
+				// Direct ancestor
+				if (ex <= xmin && (ex+ew+fudge) >= xmax) {
+					e.classList.add("parent");
+					zoom_parent(e);
+					update_text(e);
+				}
+				// not in current path
+				else
+					e.classList.add("hide");
+			}
+			// Children maybe
+			else {
+				// no common path
+				if (ex < xmin || ex + fudge >= xmax) {
+					e.classList.add("hide");
+				}
+				else {
+					zoom_child(e, xmin, ratio);
+					update_text(e);
+				}
+			}
+		}
+		search();
+	}
+	function unzoom(dont_update_text) {
+		unzoombtn.classList.add("hide");
+		var el = document.getElementById("frames").children;
+		for(var i = 0; i < el.length; i++) {
+			el[i].classList.remove("parent");
+			el[i].classList.remove("hide");
+			zoom_reset(el[i]);
+			if(!dont_update_text) update_text(el[i]);
+		}
+		search();
+	}
+	function clearzoom() {
+		unzoom();
+
+		// remove zoom state
+		var params = get_params();
+		if (params.x) delete params.x;
+		if (params.y) delete params.y;
+		history.replaceState(null, null, parse_params(params));
+	}
+
+	// search
+	function toggle_ignorecase() {
+		ignorecase = !ignorecase;
+		if (ignorecase) {
+			ignorecaseBtn.classList.add("show");
+		} else {
+			ignorecaseBtn.classList.remove("show");
+		}
+		reset_search();
+		search();
+	}
+	function reset_search() {
+		var el = document.querySelectorAll("#frames rect");
+		for (var i = 0; i < el.length; i++) {
+			orig_load(el[i], "fill")
+		}
+		var params = get_params();
+		delete params.s;
+		history.replaceState(null, null, parse_params(params));
+	}
+	function search_prompt() {
+		if (!searching) {
+			var term = prompt("Enter a search term (regexp " +
+			    "allowed, eg: ^ext4_)"
+			    + (ignorecase ? ", ignoring case" : "")
+			    + "\nPress Ctrl-i to toggle case sensitivity", "");
+			if (term != null) search(term);
+		} else {
+			reset_search();
+			searching = 0;
+			currentSearchTerm = null;
+			searchbtn.classList.remove("show");
+			searchbtn.firstChild.nodeValue = "Search"
+			matchedtxt.classList.add("hide");
+			matchedtxt.firstChild.nodeValue = ""
+		}
+	}
+	function search(term) {
+		if (term) currentSearchTerm = term;
+		if (currentSearchTerm === null) return;
+
+		var re = new RegExp(currentSearchTerm, ignorecase ? 'i' : '');
+		var el = document.getElementById("frames").children;
+		var matches = new Object();
+		var maxwidth = 0;
+		for (var i = 0; i < el.length; i++) {
+			var e = el[i];
+			var func = g_to_func(e);
+			var rect = find_child(e, "rect");
+			if (func == null || rect == null)
+				continue;
+
+			// Save max width. Only works as we have a root frame
+			var w = parseFloat(rect.attributes.width.value);
+			if (w > maxwidth)
+				maxwidth = w;
+
+			if (func.match(re)) {
+				// highlight
+				var x = parseFloat(rect.attributes.x.value);
+				orig_save(rect, "fill");
+				rect.attributes.fill.value = "rgb(230,0,230)";
+
+				// remember matches
+				if (matches[x] == undefined) {
+					matches[x] = w;
+				} else {
+					if (w > matches[x]) {
+						// overwrite with parent
+						matches[x] = w;
+					}
+				}
+				searching = 1;
+			}
+		}
+		if (!searching)
+			return;
+		var params = get_params();
+		params.s = currentSearchTerm;
+		history.replaceState(null, null, parse_params(params));
+
+		searchbtn.classList.add("show");
+		searchbtn.firstChild.nodeValue = "Reset Search";
+
+		// calculate percent matched, excluding vertical overlap
+		var count = 0;
+		var lastx = -1;
+		var lastw = 0;
+		var keys = Array();
+		for (k in matches) {
+			if (matches.hasOwnProperty(k))
+				keys.push(k);
+		}
+		// sort the matched frames by their x location
+		// ascending, then width descending
+		keys.sort(function(a, b){
+			return a - b;
+		});
+		// Step through frames saving only the biggest bottom-up frames
+		// thanks to the sort order. This relies on the tree property
+		// where children are always smaller than their parents.
+		var fudge = 0.0001;	// JavaScript floating point
+		for (var k in keys) {
+			var x = parseFloat(keys[k]);
+			var w = matches[keys[k]];
+			if (x >= lastx + lastw - fudge) {
+				count += w;
+				lastx = x;
+				lastw = w;
+			}
+		}
+		// display matched percent
+		matchedtxt.classList.remove("hide");
+		var pct = 100 * count / maxwidth;
+		if (pct != 100) pct = pct.toFixed(1)
+		matchedtxt.firstChild.nodeValue = "Matched: " + pct + "%";
+	}
+]]>
+</script>
+<rect x="0.0" y="0" width="1200.0" height="382.0" fill="url(#background)"  />
+<text id="title" x="600.00" y="24" >raytrace (original): Python-level flame graph (py-spy, 500 Hz)</text>
+<text id="subtitle" x="600.00" y="48" >width = share of run time, height = call stack, top box = source line</text>
+<text id="details" x="10.00" y="365" > </text>
+<text id="unzoom" x="10.00" y="24" class="hide">Reset Zoom</text>
+<text id="search" x="1090.00" y="24" >Search</text>
+<text id="ignorecase" x="1174.00" y="24" >ic</text>
+<text id="matched" x="1090.00" y="365" > </text>
+<g id="frames">
+<g >
+<title>L286: if t is not None and t &gt; EPSILON: (1 samples, 0.02%)</title><rect x="592.9" y="157" width="0.2" height="15.0" fill="rgb(252,216,51)" rx="2" ry="2" />
+<text  x="595.94" y="167.5" ></text>
+</g>
+<g >
+<title>scale (6 samples, 0.10%)</title><rect x="561.2" y="157" width="1.2" height="15.0" fill="rgb(254,227,54)" rx="2" ry="2" />
+<text  x="564.18" y="167.5" ></text>
+</g>
+<g >
+<title>L53: return (self.x * other.x) + (self.y * other.y) + (self.z * other.z) (2 samples, 0.03%)</title><rect x="560.8" y="125" width="0.4" height="15.0" fill="rgb(205,1,0)" rx="2" ry="2" />
+<text  x="563.78" y="135.5" ></text>
+</g>
+<g >
+<title>L25: self.x = initx (55 samples, 0.91%)</title><rect x="249.4" y="205" width="10.8" height="15.0" fill="rgb(252,218,52)" rx="2" ry="2" />
+<text  x="252.41" y="215.5" ></text>
+</g>
+<g >
+<title>L165: v = ray.vector.dot(self.normal) (5 samples, 0.08%)</title><rect x="1045.7" y="205" width="1.0" height="15.0" fill="rgb(240,163,39)" rx="2" ry="2" />
+<text  x="1048.69" y="215.5" ></text>
+</g>
+<g >
+<title>mustBeVector (3 samples, 0.05%)</title><rect x="554.3" y="157" width="0.6" height="15.0" fill="rgb(232,125,29)" rx="2" ry="2" />
+<text  x="557.31" y="167.5" ></text>
+</g>
+<g >
+<title>L62: return self.scale(1.0 / self.magnitude()) (10 samples, 0.17%)</title><rect x="382.2" y="221" width="1.9" height="15.0" fill="rgb(238,153,36)" rx="2" ry="2" />
+<text  x="385.16" y="231.5" ></text>
+</g>
+<g >
+<title>L53: return (self.x * other.x) + (self.y * other.y) + (self.z * other.z) (1 samples, 0.02%)</title><rect x="534.3" y="173" width="0.2" height="15.0" fill="rgb(205,1,0)" rx="2" ry="2" />
+<text  x="537.31" y="183.5" ></text>
+</g>
+<g >
+<title>L27: self.z = initz (25 samples, 0.42%)</title><rect x="263.9" y="205" width="4.9" height="15.0" fill="rgb(213,39,9)" rx="2" ry="2" />
+<text  x="266.92" y="215.5" ></text>
+</g>
+<g >
+<title>L123: return True (1 samples, 0.02%)</title><rect x="727.8" y="189" width="0.2" height="15.0" fill="rgb(237,147,35)" rx="2" ry="2" />
+<text  x="730.84" y="199.5" ></text>
+</g>
+<g >
+<title>L115: return Vector(self.x - other.x, self.y - other.y, self.z - other.z) (189 samples, 3.14%)</title><rect x="212.4" y="221" width="37.0" height="15.0" fill="rgb(240,162,38)" rx="2" ry="2" />
+<text  x="215.35" y="231.5" >L11..</text>
+</g>
+<g >
+<title>L52: other.mustBeVector() (21 samples, 0.35%)</title><rect x="709.2" y="157" width="4.1" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
+<text  x="712.22" y="167.5" ></text>
+</g>
+<g >
+<title>__init__ (9 samples, 0.15%)</title><rect x="544.1" y="157" width="1.8" height="15.0" fill="rgb(242,171,41)" rx="2" ry="2" />
+<text  x="547.12" y="167.5" ></text>
+</g>
+<g >
+<title>L300: a[1] + scale * b[1], (3 samples, 0.05%)</title><rect x="562.7" y="173" width="0.6" height="15.0" fill="rgb(252,217,52)" rx="2" ry="2" />
+<text  x="565.75" y="183.5" ></text>
+</g>
+<g >
+<title>L179: self.vector = vector.normalized() (13 samples, 0.22%)</title><rect x="67.3" y="269" width="2.5" height="15.0" fill="rgb(252,219,52)" rx="2" ry="2" />
+<text  x="70.25" y="279.5" ></text>
+</g>
+<g >
+<title>rayColour (1,515 samples, 25.17%)</title><rect x="433.3" y="253" width="297.1" height="15.0" fill="rgb(212,32,7)" rx="2" ry="2" />
+<text  x="436.33" y="263.5" >rayColour</text>
+</g>
+<g >
+<title>visibleLights (22 samples, 0.37%)</title><rect x="579.6" y="157" width="4.3" height="15.0" fill="rgb(219,68,16)" rx="2" ry="2" />
+<text  x="582.61" y="167.5" ></text>
+</g>
+<g >
+<title>L145: discriminant = (self.radius * self.radius) - (cp.dot(cp) - v * v) (41 samples, 0.68%)</title><rect x="452.7" y="205" width="8.1" height="15.0" fill="rgb(210,23,5)" rx="2" ry="2" />
+<text  x="455.75" y="215.5" ></text>
+</g>
+<g >
+<title>L114: if other.isPoint(): (25 samples, 0.42%)</title><rect x="467.1" y="189" width="4.9" height="15.0" fill="rgb(212,36,8)" rx="2" ry="2" />
+<text  x="470.06" y="199.5" ></text>
+</g>
+<g >
+<title>visibleLights (212 samples, 3.52%)</title><rect x="585.7" y="189" width="41.6" height="15.0" fill="rgb(219,68,16)" rx="2" ry="2" />
+<text  x="588.69" y="199.5" >vis..</text>
+</g>
+<g >
+<title>scale (10 samples, 0.17%)</title><rect x="386.5" y="221" width="1.9" height="15.0" fill="rgb(254,227,54)" rx="2" ry="2" />
+<text  x="389.47" y="231.5" ></text>
+</g>
+<g >
+<title>L26: self.y = inity (1 samples, 0.02%)</title><rect x="528.2" y="157" width="0.2" height="15.0" fill="rgb(233,128,30)" rx="2" ry="2" />
+<text  x="531.24" y="167.5" ></text>
+</g>
+<g >
+<title>L279: return s.colourAt(self, ray, p, o.normalAt(p)) (18 samples, 0.30%)</title><rect x="352.5" y="269" width="3.6" height="15.0" fill="rgb(235,139,33)" rx="2" ry="2" />
+<text  x="355.55" y="279.5" ></text>
+</g>
+<g >
+<title>L217: if candidateT is not None and candidateT &gt; -EPSILON: (1 samples, 0.02%)</title><rect x="627.6" y="189" width="0.2" height="15.0" fill="rgb(212,35,8)" rx="2" ry="2" />
+<text  x="630.65" y="199.5" ></text>
+</g>
+<g >
+<title>L36: return math.sqrt(self.dot(self)) (17 samples, 0.28%)</title><rect x="659.4" y="141" width="3.3" height="15.0" fill="rgb(247,195,46)" rx="2" ry="2" />
+<text  x="662.41" y="151.5" ></text>
+</g>
+<g >
+<title>L77: return self (24 samples, 0.40%)</title><rect x="340.6" y="205" width="4.7" height="15.0" fill="rgb(230,119,28)" rx="2" ry="2" />
+<text  x="343.59" y="215.5" ></text>
+</g>
+<g >
+<title>__sub__ (343 samples, 5.70%)</title><rect x="204.5" y="237" width="67.3" height="15.0" fill="rgb(227,101,24)" rx="2" ry="2" />
+<text  x="207.51" y="247.5" >__sub__</text>
+</g>
+<g >
+<title>L114: if other.isPoint(): (30 samples, 0.50%)</title><rect x="1047.1" y="189" width="5.8" height="15.0" fill="rgb(212,36,8)" rx="2" ry="2" />
+<text  x="1050.06" y="199.5" ></text>
+</g>
+<g >
+<title>dot (20 samples, 0.33%)</title><rect x="623.3" y="141" width="4.0" height="15.0" fill="rgb(251,212,50)" rx="2" ry="2" />
+<text  x="626.33" y="151.5" ></text>
+</g>
+<g >
+<title>L49: return Vector(factor * self.x, factor * self.y, factor * self.z) (23 samples, 0.38%)</title><rect x="1176.9" y="269" width="4.5" height="15.0" fill="rgb(253,224,53)" rx="2" ry="2" />
+<text  x="1179.86" y="279.5" ></text>
+</g>
+<g >
+<title>L25: self.x = initx (1 samples, 0.02%)</title><rect x="414.7" y="205" width="0.2" height="15.0" fill="rgb(252,218,52)" rx="2" ry="2" />
+<text  x="417.71" y="215.5" ></text>
+</g>
+<g >
+<title>L152: return (p - self.centre).normalized() (3 samples, 0.05%)</title><rect x="1163.5" y="253" width="0.6" height="15.0" fill="rgb(243,175,41)" rx="2" ry="2" />
+<text  x="1166.53" y="263.5" ></text>
+</g>
+<g >
+<title>L123: return True (15 samples, 0.25%)</title><rect x="268.8" y="205" width="3.0" height="15.0" fill="rgb(237,147,35)" rx="2" ry="2" />
+<text  x="271.82" y="215.5" ></text>
+</g>
+<g >
+<title>L285: t = o.intersectionTime(Ray(p, l - p)) (36 samples, 0.60%)</title><rect x="585.9" y="157" width="7.0" height="15.0" fill="rgb(224,87,21)" rx="2" ry="2" />
+<text  x="588.88" y="167.5" ></text>
+</g>
+<g >
+<title>&lt;listcomp&gt; (100 samples, 1.66%)</title><rect x="535.3" y="205" width="19.6" height="15.0" fill="rgb(223,82,19)" rx="2" ry="2" />
+<text  x="538.29" y="215.5" ></text>
+</g>
+<g >
+<title>pointAtTime (53 samples, 0.88%)</title><rect x="1166.5" y="269" width="10.4" height="15.0" fill="rgb(238,151,36)" rx="2" ry="2" />
+<text  x="1169.47" y="279.5" ></text>
+</g>
+<g >
+<title>pointAtTime (7 samples, 0.12%)</title><rect x="729.0" y="237" width="1.4" height="15.0" fill="rgb(238,151,36)" rx="2" ry="2" />
+<text  x="732.02" y="247.5" ></text>
+</g>
+<g >
+<title>L114: if other.isPoint(): (4 samples, 0.07%)</title><rect x="1164.9" y="237" width="0.8" height="15.0" fill="rgb(212,36,8)" rx="2" ry="2" />
+<text  x="1167.90" y="247.5" ></text>
+</g>
+<g >
+<title>L272: for (o, s) in self.objects] (7 samples, 0.12%)</title><rect x="145.3" y="253" width="1.4" height="15.0" fill="rgb(225,94,22)" rx="2" ry="2" />
+<text  x="148.29" y="263.5" ></text>
+</g>
+<g >
+<title>isPoint (15 samples, 0.25%)</title><rect x="268.8" y="221" width="3.0" height="15.0" fill="rgb(220,70,16)" rx="2" ry="2" />
+<text  x="271.82" y="231.5" ></text>
+</g>
+<g >
+<title>normalized (2 samples, 0.03%)</title><rect x="528.2" y="205" width="0.4" height="15.0" fill="rgb(206,5,1)" rx="2" ry="2" />
+<text  x="531.24" y="215.5" ></text>
+</g>
+<g >
+<title>__init__ (8 samples, 0.13%)</title><rect x="621.8" y="125" width="1.5" height="15.0" fill="rgb(242,171,41)" rx="2" ry="2" />
+<text  x="624.76" y="135.5" ></text>
+</g>
+<g >
+<title>L294: result.append(l) (5 samples, 0.08%)</title><rect x="745.7" y="237" width="1.0" height="15.0" fill="rgb(228,109,26)" rx="2" ry="2" />
+<text  x="748.69" y="247.5" ></text>
+</g>
+<g >
+<title>dot (18 samples, 0.30%)</title><rect x="77.3" y="237" width="3.5" height="15.0" fill="rgb(251,212,50)" rx="2" ry="2" />
+<text  x="80.25" y="247.5" ></text>
+</g>
+<g >
+<title>L49: return Vector(factor * self.x, factor * self.y, factor * self.z) (96 samples, 1.60%)</title><rect x="908.4" y="173" width="18.9" height="15.0" fill="rgb(253,224,53)" rx="2" ry="2" />
+<text  x="911.43" y="183.5" ></text>
+</g>
+<g >
+<title>L215: for i in intersections: (8 samples, 0.13%)</title><rect x="1153.7" y="253" width="1.6" height="15.0" fill="rgb(224,91,21)" rx="2" ry="2" />
+<text  x="1156.73" y="263.5" ></text>
+</g>
+<g >
+<title>L300: a[1] + scale * b[1], (1 samples, 0.02%)</title><rect x="577.6" y="141" width="0.2" height="15.0" fill="rgb(252,217,52)" rx="2" ry="2" />
+<text  x="580.65" y="151.5" ></text>
+</g>
+<g >
+<title>L293: if self._lightIsVisible(l, p): (12 samples, 0.20%)</title><rect x="743.3" y="237" width="2.4" height="15.0" fill="rgb(238,154,37)" rx="2" ry="2" />
+<text  x="746.33" y="247.5" ></text>
+</g>
+<g >
+<title>_lightIsVisible (22 samples, 0.37%)</title><rect x="579.6" y="141" width="4.3" height="15.0" fill="rgb(234,136,32)" rx="2" ry="2" />
+<text  x="582.61" y="151.5" ></text>
+</g>
+<g >
+<title>magnitude (12 samples, 0.20%)</title><rect x="384.1" y="221" width="2.4" height="15.0" fill="rgb(224,91,21)" rx="2" ry="2" />
+<text  x="387.12" y="231.5" ></text>
+</g>
+<g >
+<title>normalized (8 samples, 0.13%)</title><rect x="560.8" y="173" width="1.6" height="15.0" fill="rgb(206,5,1)" rx="2" ry="2" />
+<text  x="563.78" y="183.5" ></text>
+</g>
+<g >
+<title>L25: self.x = initx (4 samples, 0.07%)</title><rect x="736.9" y="205" width="0.7" height="15.0" fill="rgb(252,218,52)" rx="2" ry="2" />
+<text  x="739.86" y="215.5" ></text>
+</g>
+<g >
+<title>L215: for i in intersections: (2 samples, 0.03%)</title><rect x="627.3" y="189" width="0.3" height="15.0" fill="rgb(224,91,21)" rx="2" ry="2" />
+<text  x="630.25" y="199.5" ></text>
+</g>
+<g >
+<title>L179: self.vector = vector.normalized() (11 samples, 0.18%)</title><rect x="650.6" y="173" width="2.1" height="15.0" fill="rgb(252,219,52)" rx="2" ry="2" />
+<text  x="653.59" y="183.5" ></text>
+</g>
+<g >
+<title>L165: v = ray.vector.dot(self.normal) (7 samples, 0.12%)</title><rect x="464.7" y="205" width="1.4" height="15.0" fill="rgb(240,163,39)" rx="2" ry="2" />
+<text  x="467.71" y="215.5" ></text>
+</g>
+<g >
+<title>L144: v = cp.dot(ray.vector) (67 samples, 1.11%)</title><rect x="1012.4" y="205" width="13.1" height="15.0" fill="rgb(238,153,36)" rx="2" ry="2" />
+<text  x="1015.35" y="215.5" ></text>
+</g>
+<g >
+<title>L25: self.x = initx (34 samples, 0.56%)</title><rect x="927.3" y="157" width="6.6" height="15.0" fill="rgb(252,218,52)" rx="2" ry="2" />
+<text  x="930.25" y="167.5" ></text>
+</g>
+<g >
+<title>L165: v = ray.vector.dot(self.normal) (2 samples, 0.03%)</title><rect x="615.1" y="141" width="0.4" height="15.0" fill="rgb(240,163,39)" rx="2" ry="2" />
+<text  x="618.10" y="151.5" ></text>
+</g>
+<g >
+<title>__sub__ (72 samples, 1.20%)</title><rect x="673.3" y="189" width="14.2" height="15.0" fill="rgb(227,101,24)" rx="2" ry="2" />
+<text  x="676.33" y="199.5" ></text>
+</g>
+<g >
+<title>__sub__ (13 samples, 0.22%)</title><rect x="412.4" y="237" width="2.5" height="15.0" fill="rgb(227,101,24)" rx="2" ry="2" />
+<text  x="415.35" y="247.5" ></text>
+</g>
+<g >
+<title>L114: if other.isPoint(): (2 samples, 0.03%)</title><rect x="727.1" y="205" width="0.4" height="15.0" fill="rgb(212,36,8)" rx="2" ry="2" />
+<text  x="730.06" y="215.5" ></text>
+</g>
+<g >
+<title>L330: lambertAmount = min(1, lambertAmount) (2 samples, 0.03%)</title><rect x="526.9" y="221" width="0.4" height="15.0" fill="rgb(227,105,25)" rx="2" ry="2" />
+<text  x="529.86" y="231.5" ></text>
+</g>
+<g >
+<title>L52: other.mustBeVector() (7 samples, 0.12%)</title><rect x="623.3" y="125" width="1.4" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
+<text  x="626.33" y="135.5" ></text>
+</g>
+<g >
+<title>L328: if contribution &gt; 0: (6 samples, 0.10%)</title><rect x="557.6" y="189" width="1.2" height="15.0" fill="rgb(209,18,4)" rx="2" ry="2" />
+<text  x="560.65" y="199.5" ></text>
+</g>
+<g >
+<title>L320: reflectedRay = Ray(p, ray.vector.reflectThrough(normal)) (8 samples, 0.13%)</title><rect x="362.4" y="253" width="1.5" height="15.0" fill="rgb(212,36,8)" rx="2" ry="2" />
+<text  x="365.35" y="263.5" ></text>
+</g>
+<g >
+<title>L271: intersections = [(o, o.intersectionTime(ray), s) (5 samples, 0.08%)</title><rect x="519.0" y="237" width="1.0" height="15.0" fill="rgb(248,202,48)" rx="2" ry="2" />
+<text  x="522.02" y="247.5" ></text>
+</g>
+<g >
+<title>L300: a[1] + scale * b[1], (8 samples, 0.13%)</title><rect x="400.6" y="237" width="1.6" height="15.0" fill="rgb(252,217,52)" rx="2" ry="2" />
+<text  x="403.59" y="247.5" ></text>
+</g>
+<g >
+<title>L25: self.x = initx (5 samples, 0.08%)</title><rect x="601.8" y="93" width="0.9" height="15.0" fill="rgb(252,218,52)" rx="2" ry="2" />
+<text  x="604.76" y="103.5" ></text>
+</g>
+<g >
+<title>isPoint (4 samples, 0.07%)</title><rect x="610.6" y="141" width="0.8" height="15.0" fill="rgb(220,70,16)" rx="2" ry="2" />
+<text  x="613.59" y="151.5" ></text>
+</g>
+<g >
+<title>L322: c = addColours(c, self.specularCoefficient, reflectedColour) (2 samples, 0.03%)</title><rect x="577.3" y="157" width="0.3" height="15.0" fill="rgb(211,28,6)" rx="2" ry="2" />
+<text  x="580.25" y="167.5" ></text>
+</g>
+<g >
+<title>L165: v = ray.vector.dot(self.normal) (3 samples, 0.05%)</title><rect x="697.8" y="173" width="0.6" height="15.0" fill="rgb(240,163,39)" rx="2" ry="2" />
+<text  x="700.84" y="183.5" ></text>
+</g>
+<g >
+<title>L271: intersections = [(o, o.intersectionTime(ray), s) (4 samples, 0.07%)</title><rect x="535.3" y="189" width="0.8" height="15.0" fill="rgb(248,202,48)" rx="2" ry="2" />
+<text  x="538.29" y="199.5" ></text>
+</g>
+<g >
+<title>baseColourAt (55 samples, 0.91%)</title><rect x="404.7" y="253" width="10.8" height="15.0" fill="rgb(232,126,30)" rx="2" ry="2" />
+<text  x="407.71" y="263.5" ></text>
+</g>
+<g >
+<title>mustBeVector (21 samples, 0.35%)</title><rect x="904.3" y="157" width="4.1" height="15.0" fill="rgb(232,125,29)" rx="2" ry="2" />
+<text  x="907.31" y="167.5" ></text>
+</g>
+<g >
+<title>normalized (91 samples, 1.51%)</title><rect x="69.8" y="269" width="17.8" height="15.0" fill="rgb(206,5,1)" rx="2" ry="2" />
+<text  x="72.80" y="279.5" ></text>
+</g>
+<g >
+<title>L53: return (self.x * other.x) + (self.y * other.y) + (self.z * other.z) (13 samples, 0.22%)</title><rect x="624.7" y="125" width="2.6" height="15.0" fill="rgb(205,1,0)" rx="2" ry="2" />
+<text  x="627.71" y="135.5" ></text>
+</g>
+<g >
+<title>L49: return Vector(factor * self.x, factor * self.y, factor * self.z) (20 samples, 0.33%)</title><rect x="80.8" y="237" width="3.9" height="15.0" fill="rgb(253,224,53)" rx="2" ry="2" />
+<text  x="83.78" y="247.5" ></text>
+</g>
+<g >
+<title>L267: if self.recursionDepth &gt; 3: (1 samples, 0.02%)</title><rect x="576.5" y="173" width="0.2" height="15.0" fill="rgb(247,194,46)" rx="2" ry="2" />
+<text  x="579.47" y="183.5" ></text>
+</g>
+<g >
+<title>L270: self.recursionDepth = self.recursionDepth + (3 samples, 0.05%; +0.03%)</title><rect x="518.4" y="237" width="0.6" height="15.0" fill="rgb(255,208,208)" rx="2" ry="2" />
+<text  x="521.43" y="247.5" ></text>
+</g>
+<g >
+<title>scale (182 samples, 3.02%)</title><rect x="908.4" y="189" width="35.7" height="15.0" fill="rgb(254,227,54)" rx="2" ry="2" />
+<text  x="911.43" y="199.5" >scale</text>
+</g>
+<g >
+<title>colourAt (362 samples, 6.02%)</title><rect x="556.3" y="205" width="71.0" height="15.0" fill="rgb(230,118,28)" rx="2" ry="2" />
+<text  x="559.27" y="215.5" >colourAt</text>
+</g>
+<g >
+<title>L143: cp = self.centre - ray.point (8 samples, 0.13%)</title><rect x="687.5" y="173" width="1.5" height="15.0" fill="rgb(224,88,21)" rx="2" ry="2" />
+<text  x="690.45" y="183.5" ></text>
+</g>
+<g >
+<title>__init__ (3 samples, 0.05%)</title><rect x="728.4" y="189" width="0.6" height="15.0" fill="rgb(242,171,41)" rx="2" ry="2" />
+<text  x="731.43" y="199.5" ></text>
+</g>
+<g >
+<title>bench_raytrace (6,018 samples, 100.00%)</title><rect x="10.0" y="317" width="1180.0" height="15.0" fill="rgb(243,176,42)" rx="2" ry="2" />
+<text  x="13.00" y="327.5" >bench_raytrace</text>
+</g>
+<g >
+<title>__init__ (1 samples, 0.02%)</title><rect x="633.3" y="189" width="0.2" height="15.0" fill="rgb(242,171,41)" rx="2" ry="2" />
+<text  x="636.33" y="199.5" ></text>
+</g>
+<g >
+<title>L49: return Vector(factor * self.x, factor * self.y, factor * self.z) (17 samples, 0.28%)</title><rect x="425.9" y="221" width="3.3" height="15.0" fill="rgb(253,224,53)" rx="2" ry="2" />
+<text  x="428.88" y="231.5" ></text>
+</g>
+<g >
+<title>L114: if other.isPoint(): (3 samples, 0.05%)</title><rect x="699.0" y="157" width="0.6" height="15.0" fill="rgb(212,36,8)" rx="2" ry="2" />
+<text  x="702.02" y="167.5" ></text>
+</g>
+<g >
+<title>L53: return (self.x * other.x) + (self.y * other.y) + (self.z * other.z) (99 samples, 1.65%)</title><rect x="496.7" y="189" width="19.4" height="15.0" fill="rgb(205,1,0)" rx="2" ry="2" />
+<text  x="499.67" y="199.5" ></text>
+</g>
+<g >
+<title>mustBeVector (24 samples, 0.40%)</title><rect x="340.6" y="221" width="4.7" height="15.0" fill="rgb(232,125,29)" rx="2" ry="2" />
+<text  x="343.59" y="231.5" ></text>
+</g>
+<g >
+<title>L111: return Point(self.x + other.x, self.y + other.y, self.z + other.z) (20 samples, 0.33%)</title><rect x="1167.8" y="237" width="4.0" height="15.0" fill="rgb(233,129,30)" rx="2" ry="2" />
+<text  x="1170.84" y="247.5" ></text>
+</g>
+<g >
+<title>L348: v.scale(1.0 / self.checkSize) (4 samples, 0.07%)</title><rect x="531.4" y="205" width="0.8" height="15.0" fill="rgb(232,128,30)" rx="2" ry="2" />
+<text  x="534.37" y="215.5" ></text>
+</g>
+<g >
+<title>L144: v = cp.dot(ray.vector) (5 samples, 0.08%)</title><rect x="612.7" y="141" width="1.0" height="15.0" fill="rgb(238,153,36)" rx="2" ry="2" />
+<text  x="615.75" y="151.5" ></text>
+</g>
+<g >
+<title>L62: return self.scale(1.0 / self.magnitude()) (12 samples, 0.20%)</title><rect x="69.8" y="253" width="2.4" height="15.0" fill="rgb(238,153,36)" rx="2" ry="2" />
+<text  x="72.80" y="263.5" ></text>
+</g>
+<g >
+<title>L36: return math.sqrt(self.dot(self)) (1 samples, 0.02%)</title><rect x="627.8" y="157" width="0.2" height="15.0" fill="rgb(247,195,46)" rx="2" ry="2" />
+<text  x="630.84" y="167.5" ></text>
+</g>
+<g >
+<title>L123: return True (4 samples, 0.07%)</title><rect x="1094.9" y="173" width="0.8" height="15.0" fill="rgb(237,147,35)" rx="2" ry="2" />
+<text  x="1097.90" y="183.5" ></text>
+</g>
+<g >
+<title>L25: self.x = initx (5 samples, 0.08%)</title><rect x="572.9" y="109" width="1.0" height="15.0" fill="rgb(252,218,52)" rx="2" ry="2" />
+<text  x="575.94" y="119.5" ></text>
+</g>
+<g >
+<title>__add__ (4 samples, 0.07%)</title><rect x="628.0" y="189" width="0.8" height="15.0" fill="rgb(240,161,38)" rx="2" ry="2" />
+<text  x="631.04" y="199.5" ></text>
+</g>
+<g >
+<title>L49: return Vector(factor * self.x, factor * self.y, factor * self.z) (10 samples, 0.17%)</title><rect x="631.4" y="189" width="1.9" height="15.0" fill="rgb(253,224,53)" rx="2" ry="2" />
+<text  x="634.37" y="199.5" ></text>
+</g>
+<g >
+<title>L271: intersections = [(o, o.intersectionTime(ray), s) (1 samples, 0.02%)</title><rect x="554.9" y="205" width="0.2" height="15.0" fill="rgb(248,202,48)" rx="2" ry="2" />
+<text  x="557.90" y="215.5" ></text>
+</g>
+<g >
+<title>L178: self.point = point (1 samples, 0.02%)</title><rect x="560.6" y="173" width="0.2" height="15.0" fill="rgb(243,177,42)" rx="2" ry="2" />
+<text  x="563.59" y="183.5" ></text>
+</g>
+<g >
+<title>L146: if discriminant &lt; 0: (13 samples, 0.22%)</title><rect x="460.8" y="205" width="2.5" height="15.0" fill="rgb(209,19,4)" rx="2" ry="2" />
+<text  x="463.78" y="215.5" ></text>
+</g>
+<g >
+<title>L52: other.mustBeVector() (5 samples, 0.08%)</title><rect x="77.3" y="221" width="0.9" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
+<text  x="80.25" y="231.5" ></text>
+</g>
+<g >
+<title>__sub__ (2 samples, 0.03%)</title><rect x="583.1" y="109" width="0.4" height="15.0" fill="rgb(227,101,24)" rx="2" ry="2" />
+<text  x="586.14" y="119.5" ></text>
+</g>
+<g >
+<title>L25: self.x = initx (4 samples, 0.07%)</title><rect x="84.7" y="221" width="0.8" height="15.0" fill="rgb(252,218,52)" rx="2" ry="2" />
+<text  x="87.71" y="231.5" ></text>
+</g>
+<g >
+<title>L77: return self (4 samples, 0.07%)</title><rect x="721.6" y="141" width="0.8" height="15.0" fill="rgb(230,119,28)" rx="2" ry="2" />
+<text  x="724.57" y="151.5" ></text>
+</g>
+<g >
+<title>__init__ (1 samples, 0.02%)</title><rect x="583.3" y="93" width="0.2" height="15.0" fill="rgb(242,171,41)" rx="2" ry="2" />
+<text  x="586.33" y="103.5" ></text>
+</g>
+<g >
+<title>dot (46 samples, 0.76%)</title><rect x="545.9" y="173" width="9.0" height="15.0" fill="rgb(251,212,50)" rx="2" ry="2" />
+<text  x="548.88" y="183.5" ></text>
+</g>
+<g >
+<title>L49: return Vector(factor * self.x, factor * self.y, factor * self.z) (13 samples, 0.22%)</title><rect x="599.2" y="109" width="2.6" height="15.0" fill="rgb(253,224,53)" rx="2" ry="2" />
+<text  x="602.22" y="119.5" ></text>
+</g>
+<g >
+<title>__init__ (7 samples, 0.12%)</title><rect x="387.1" y="205" width="1.3" height="15.0" fill="rgb(242,171,41)" rx="2" ry="2" />
+<text  x="390.06" y="215.5" ></text>
+</g>
+<g >
+<title>L144: v = cp.dot(ray.vector) (9 samples, 0.15%)</title><rect x="537.6" y="173" width="1.8" height="15.0" fill="rgb(238,153,36)" rx="2" ry="2" />
+<text  x="540.65" y="183.5" ></text>
+</g>
+<g >
+<title>L321: reflectedColour = scene.rayColour(reflectedRay) (6 samples, 0.10%)</title><rect x="523.7" y="221" width="1.2" height="15.0" fill="rgb(229,113,27)" rx="2" ry="2" />
+<text  x="526.73" y="231.5" ></text>
+</g>
+<g >
+<title>L273: i = firstIntersection(intersections) (6 samples, 0.10%)</title><rect x="351.0" y="269" width="1.2" height="15.0" fill="rgb(237,151,36)" rx="2" ry="2" />
+<text  x="353.98" y="279.5" ></text>
+</g>
+<g >
+<title>isPoint (5 samples, 0.08%)</title><rect x="997.6" y="205" width="1.0" height="15.0" fill="rgb(220,70,16)" rx="2" ry="2" />
+<text  x="1000.65" y="215.5" ></text>
+</g>
+<g >
+<title>L115: return Vector(self.x - other.x, self.y - other.y, self.z - other.z) (62 samples, 1.03%)</title><rect x="472.0" y="189" width="12.1" height="15.0" fill="rgb(240,162,38)" rx="2" ry="2" />
+<text  x="474.96" y="199.5" ></text>
+</g>
+<g >
+<title>L53: return (self.x * other.x) + (self.y * other.y) + (self.z * other.z) (255 samples, 4.24%)</title><rect x="290.6" y="221" width="50.0" height="15.0" fill="rgb(205,1,0)" rx="2" ry="2" />
+<text  x="293.59" y="231.5" >L53: ..</text>
+</g>
+<g >
+<title>magnitude (2 samples, 0.03%)</title><rect x="1165.9" y="237" width="0.4" height="15.0" fill="rgb(224,91,21)" rx="2" ry="2" />
+<text  x="1168.88" y="247.5" ></text>
+</g>
+<g >
+<title>__init__ (23 samples, 0.38%)</title><rect x="682.4" y="173" width="4.5" height="15.0" fill="rgb(242,171,41)" rx="2" ry="2" />
+<text  x="685.35" y="183.5" ></text>
+</g>
+<g >
+<title>__init__ (2 samples, 0.03%)</title><rect x="528.2" y="173" width="0.4" height="15.0" fill="rgb(242,171,41)" rx="2" ry="2" />
+<text  x="531.24" y="183.5" ></text>
+</g>
+<g >
+<title>L52: other.mustBeVector() (38 samples, 0.63%)</title><rect x="489.2" y="189" width="7.5" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
+<text  x="492.22" y="199.5" ></text>
+</g>
+<g >
+<title>magnitude (51 samples, 0.85%)</title><rect x="659.4" y="157" width="10.0" height="15.0" fill="rgb(224,91,21)" rx="2" ry="2" />
+<text  x="662.41" y="167.5" ></text>
+</g>
+<g >
+<title>L143: cp = self.centre - ray.point (70 samples, 1.16%)</title><rect x="998.6" y="205" width="13.8" height="15.0" fill="rgb(224,88,21)" rx="2" ry="2" />
+<text  x="1001.63" y="215.5" ></text>
+</g>
+<g >
+<title>scale (19 samples, 0.32%)</title><rect x="599.2" y="125" width="3.7" height="15.0" fill="rgb(254,227,54)" rx="2" ry="2" />
+<text  x="602.22" y="135.5" ></text>
+</g>
+<g >
+<title>__init__ (13 samples, 0.22%)</title><rect x="608.0" y="141" width="2.6" height="15.0" fill="rgb(242,171,41)" rx="2" ry="2" />
+<text  x="611.04" y="151.5" ></text>
+</g>
+<g >
+<title>L77: return self (1 samples, 0.02%)</title><rect x="1173.7" y="221" width="0.2" height="15.0" fill="rgb(230,119,28)" rx="2" ry="2" />
+<text  x="1176.73" y="231.5" ></text>
+</g>
+<g >
+<title>L62: return self.scale(1.0 / self.magnitude()) (5 samples, 0.08%)</title><rect x="532.5" y="205" width="1.0" height="15.0" fill="rgb(238,153,36)" rx="2" ry="2" />
+<text  x="535.55" y="215.5" ></text>
+</g>
+<g >
+<title>normalAt (1 samples, 0.02%)</title><rect x="627.8" y="205" width="0.2" height="15.0" fill="rgb(251,215,51)" rx="2" ry="2" />
+<text  x="630.84" y="215.5" ></text>
+</g>
+<g >
+<title>mustBeVector (1 samples, 0.02%)</title><rect x="1173.7" y="237" width="0.2" height="15.0" fill="rgb(232,125,29)" rx="2" ry="2" />
+<text  x="1176.73" y="247.5" ></text>
+</g>
+<g >
+<title>L110: other.mustBeVector() (4 samples, 0.07%)</title><rect x="628.0" y="173" width="0.8" height="15.0" fill="rgb(219,65,15)" rx="2" ry="2" />
+<text  x="631.04" y="183.5" ></text>
+</g>
+<g >
+<title>L52: other.mustBeVector() (2 samples, 0.03%)</title><rect x="1165.9" y="205" width="0.4" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
+<text  x="1168.88" y="215.5" ></text>
+</g>
+<g >
+<title>L272: for (o, s) in self.objects] (1 samples, 0.02%)</title><rect x="350.8" y="269" width="0.2" height="15.0" fill="rgb(225,94,22)" rx="2" ry="2" />
+<text  x="353.78" y="279.5" ></text>
+</g>
+<g >
+<title>L330: lambertAmount = min(1, lambertAmount) (2 samples, 0.03%)</title><rect x="376.7" y="253" width="0.4" height="15.0" fill="rgb(227,105,25)" rx="2" ry="2" />
+<text  x="379.67" y="263.5" ></text>
+</g>
+<g >
+<title>L53: return (self.x * other.x) + (self.y * other.y) + (self.z * other.z) (2 samples, 0.03%)</title><rect x="583.5" y="93" width="0.4" height="15.0" fill="rgb(205,1,0)" rx="2" ry="2" />
+<text  x="586.53" y="103.5" ></text>
+</g>
+<g >
+<title>L27: self.z = initz (2 samples, 0.03%)</title><rect x="566.1" y="141" width="0.4" height="15.0" fill="rgb(213,39,9)" rx="2" ry="2" />
+<text  x="569.08" y="151.5" ></text>
+</g>
+<g >
+<title>L25: self.x = initx (5 samples, 0.08%)</title><rect x="608.0" y="125" width="1.0" height="15.0" fill="rgb(252,218,52)" rx="2" ry="2" />
+<text  x="611.04" y="135.5" ></text>
+</g>
+<g >
+<title>__sub__ (113 samples, 1.88%)</title><rect x="467.1" y="205" width="22.1" height="15.0" fill="rgb(227,101,24)" rx="2" ry="2" />
+<text  x="470.06" y="215.5" >_..</text>
+</g>
+<g >
+<title>__init__ (127 samples, 2.11%)</title><rect x="648.4" y="189" width="24.9" height="15.0" fill="rgb(242,171,41)" rx="2" ry="2" />
+<text  x="651.43" y="199.5" >_..</text>
+</g>
+<g >
+<title>__sub__ (278 samples, 4.62%)</title><rect x="944.1" y="221" width="54.5" height="15.0" fill="rgb(227,101,24)" rx="2" ry="2" />
+<text  x="947.12" y="231.5" >__sub__</text>
+</g>
+<g >
+<title>L179: self.vector = vector.normalized() (65 samples, 1.08%)</title><rect x="823.1" y="205" width="12.8" height="15.0" fill="rgb(252,219,52)" rx="2" ry="2" />
+<text  x="826.14" y="215.5" ></text>
+</g>
+<g >
+<title>L49: return Vector(factor * self.x, factor * self.y, factor * self.z) (3 samples, 0.05%)</title><rect x="386.5" y="205" width="0.6" height="15.0" fill="rgb(253,224,53)" rx="2" ry="2" />
+<text  x="389.47" y="215.5" ></text>
+</g>
+<g >
+<title>L115: return Vector(self.x - other.x, self.y - other.y, self.z - other.z) (6 samples, 0.10%)</title><rect x="542.9" y="157" width="1.2" height="15.0" fill="rgb(240,162,38)" rx="2" ry="2" />
+<text  x="545.94" y="167.5" ></text>
+</g>
+<g >
+<title>L27: self.z = initz (1 samples, 0.02%)</title><rect x="528.4" y="157" width="0.2" height="15.0" fill="rgb(213,39,9)" rx="2" ry="2" />
+<text  x="531.43" y="167.5" ></text>
+</g>
+<g >
+<title>__init__ (117 samples, 1.94%)</title><rect x="64.7" y="285" width="22.9" height="15.0" fill="rgb(242,171,41)" rx="2" ry="2" />
+<text  x="67.71" y="295.5" >_..</text>
+</g>
+<g >
+<title>L25: self.x = initx (2 samples, 0.03%)</title><rect x="544.1" y="141" width="0.4" height="15.0" fill="rgb(252,218,52)" rx="2" ry="2" />
+<text  x="547.12" y="151.5" ></text>
+</g>
+<g >
+<title>L26: self.y = inity (2 samples, 0.03%)</title><rect x="742.0" y="205" width="0.4" height="15.0" fill="rgb(233,128,30)" rx="2" ry="2" />
+<text  x="744.96" y="215.5" ></text>
+</g>
+<g >
+<title>__sub__ (3 samples, 0.05%)</title><rect x="577.8" y="141" width="0.6" height="15.0" fill="rgb(227,101,24)" rx="2" ry="2" />
+<text  x="580.84" y="151.5" ></text>
+</g>
+<g >
+<title>L27: self.z = initz (6 samples, 0.10%)</title><rect x="609.4" y="125" width="1.2" height="15.0" fill="rgb(213,39,9)" rx="2" ry="2" />
+<text  x="612.41" y="135.5" ></text>
+</g>
+<g >
+<title>L336: return c (4 samples, 0.07%)</title><rect x="380.4" y="253" width="0.8" height="15.0" fill="rgb(246,189,45)" rx="2" ry="2" />
+<text  x="383.39" y="263.5" ></text>
+</g>
+<g >
+<title>magnitude (272 samples, 4.52%)</title><rect x="855.1" y="189" width="53.3" height="15.0" fill="rgb(224,91,21)" rx="2" ry="2" />
+<text  x="858.10" y="199.5" >magni..</text>
+</g>
+<g >
+<title>scale (1 samples, 0.02%)</title><rect x="628.8" y="189" width="0.2" height="15.0" fill="rgb(254,227,54)" rx="2" ry="2" />
+<text  x="631.82" y="199.5" ></text>
+</g>
+<g >
+<title>scale (20 samples, 0.33%)</title><rect x="669.4" y="157" width="3.9" height="15.0" fill="rgb(254,227,54)" rx="2" ry="2" />
+<text  x="672.41" y="167.5" ></text>
+</g>
+<g >
+<title>L26: self.y = inity (6 samples, 0.10%)</title><rect x="485.5" y="173" width="1.2" height="15.0" fill="rgb(233,128,30)" rx="2" ry="2" />
+<text  x="488.49" y="183.5" ></text>
+</g>
+<g >
+<title>&lt;listcomp&gt; (51 samples, 0.85%)</title><rect x="566.5" y="173" width="10.0" height="15.0" fill="rgb(223,82,19)" rx="2" ry="2" />
+<text  x="569.47" y="183.5" ></text>
+</g>
+<g >
+<title>L52: other.mustBeVector() (6 samples, 0.10%)</title><rect x="563.3" y="173" width="1.2" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
+<text  x="566.33" y="183.5" ></text>
+</g>
+<g >
+<title>L115: return Vector(self.x - other.x, self.y - other.y, self.z - other.z) (33 samples, 0.55%)</title><rect x="699.6" y="157" width="6.5" height="15.0" fill="rgb(240,162,38)" rx="2" ry="2" />
+<text  x="702.61" y="167.5" ></text>
+</g>
+<g >
+<title>L326: for lightPoint in scene.visibleLights(p): (14 samples, 0.23%)</title><rect x="366.7" y="253" width="2.7" height="15.0" fill="rgb(223,86,20)" rx="2" ry="2" />
+<text  x="369.67" y="263.5" ></text>
+</g>
+<g >
+<title>L278: p = ray.pointAtTime(t) (2 samples, 0.03%)</title><rect x="352.2" y="269" width="0.3" height="15.0" fill="rgb(230,116,27)" rx="2" ry="2" />
+<text  x="355.16" y="279.5" ></text>
+</g>
+<g >
+<title>firstIntersection (23 samples, 0.38%)</title><rect x="722.4" y="237" width="4.5" height="15.0" fill="rgb(237,147,35)" rx="2" ry="2" />
+<text  x="725.35" y="247.5" ></text>
+</g>
+<g >
+<title>L218: if result is None or candidateT &lt; result[1]: (1 samples, 0.02%)</title><rect x="1163.1" y="253" width="0.2" height="15.0" fill="rgb(242,172,41)" rx="2" ry="2" />
+<text  x="1166.14" y="263.5" ></text>
+</g>
+<g >
+<title>normalized (43 samples, 0.71%)</title><rect x="594.5" y="141" width="8.4" height="15.0" fill="rgb(206,5,1)" rx="2" ry="2" />
+<text  x="597.51" y="151.5" ></text>
+</g>
+<g >
+<title>L25: self.x = initx (2 samples, 0.03%)</title><rect x="1176.5" y="221" width="0.4" height="15.0" fill="rgb(252,218,52)" rx="2" ry="2" />
+<text  x="1179.47" y="231.5" ></text>
+</g>
+<g >
+<title>L143: cp = self.centre - ray.point (7 samples, 0.12%)</title><rect x="567.5" y="141" width="1.3" height="15.0" fill="rgb(224,88,21)" rx="2" ry="2" />
+<text  x="570.45" y="151.5" ></text>
+</g>
+<g >
+<title>__sub__ (5 samples, 0.08%)</title><rect x="528.6" y="221" width="1.0" height="15.0" fill="rgb(227,101,24)" rx="2" ry="2" />
+<text  x="531.63" y="231.5" ></text>
+</g>
+<g >
+<title>L46: return Vector(self.x - other.x, self.y - other.y, self.z - other.z) (4 samples, 0.07%)</title><rect x="630.6" y="189" width="0.8" height="15.0" fill="rgb(230,119,28)" rx="2" ry="2" />
+<text  x="633.59" y="199.5" ></text>
+</g>
+<g >
+<title>L167: return 1 / -v (2 samples, 0.03%)</title><rect x="570.6" y="141" width="0.4" height="15.0" fill="rgb(236,143,34)" rx="2" ry="2" />
+<text  x="573.59" y="151.5" ></text>
+</g>
+<g >
+<title>L114: if other.isPoint(): (1 samples, 0.02%)</title><rect x="532.2" y="189" width="0.2" height="15.0" fill="rgb(212,36,8)" rx="2" ry="2" />
+<text  x="535.16" y="199.5" ></text>
+</g>
+<g >
+<title>scale (35 samples, 0.58%)</title><rect x="80.8" y="253" width="6.8" height="15.0" fill="rgb(254,227,54)" rx="2" ry="2" />
+<text  x="83.78" y="263.5" ></text>
+</g>
+<g >
+<title>L110: other.mustBeVector() (1 samples, 0.02%)</title><rect x="1167.6" y="237" width="0.2" height="15.0" fill="rgb(219,65,15)" rx="2" ry="2" />
+<text  x="1170.65" y="247.5" ></text>
+</g>
+<g >
+<title>L114: if other.isPoint(): (40 samples, 0.66%)</title><rect x="204.5" y="221" width="7.9" height="15.0" fill="rgb(212,36,8)" rx="2" ry="2" />
+<text  x="207.51" y="231.5" ></text>
+</g>
+<g >
+<title>L77: return self (6 samples, 0.10%)</title><rect x="516.1" y="173" width="1.2" height="15.0" fill="rgb(230,119,28)" rx="2" ry="2" />
+<text  x="519.08" y="183.5" ></text>
+</g>
+<g >
+<title>__init__ (2 samples, 0.03%)</title><rect x="585.3" y="157" width="0.4" height="15.0" fill="rgb(242,171,41)" rx="2" ry="2" />
+<text  x="588.29" y="167.5" ></text>
+</g>
+<g >
+<title>__init__ (17 samples, 0.28%)</title><rect x="10.0" y="301" width="3.3" height="15.0" fill="rgb(242,171,41)" rx="2" ry="2" />
+<text  x="13.00" y="311.5" ></text>
+</g>
+<g >
+<title>L123: return True (6 samples, 0.10%)</title><rect x="488.0" y="173" width="1.2" height="15.0" fill="rgb(237,147,35)" rx="2" ry="2" />
+<text  x="491.04" y="183.5" ></text>
+</g>
+<g >
+<title>__init__ (20 samples, 0.33%)</title><rect x="484.1" y="189" width="3.9" height="15.0" fill="rgb(242,171,41)" rx="2" ry="2" />
+<text  x="487.12" y="199.5" ></text>
+</g>
+<g >
+<title>L77: return self (3 samples, 0.05%)</title><rect x="554.3" y="141" width="0.6" height="15.0" fill="rgb(230,119,28)" rx="2" ry="2" />
+<text  x="557.31" y="151.5" ></text>
+</g>
+<g >
+<title>__init__ (50 samples, 0.83%)</title><rect x="593.1" y="157" width="9.8" height="15.0" fill="rgb(242,171,41)" rx="2" ry="2" />
+<text  x="596.14" y="167.5" ></text>
+</g>
+<g >
+<title>L146: if discriminant &lt; 0: (1 samples, 0.02%)</title><rect x="614.9" y="141" width="0.2" height="15.0" fill="rgb(209,19,4)" rx="2" ry="2" />
+<text  x="617.90" y="151.5" ></text>
+</g>
+<g >
+<title>L329: lambertAmount = lambertAmount + contribution (1 samples, 0.02%)</title><rect x="376.5" y="253" width="0.2" height="15.0" fill="rgb(233,130,31)" rx="2" ry="2" />
+<text  x="379.47" y="263.5" ></text>
+</g>
+<g >
+<title>L216: candidateT = i[1] (18 samples, 0.30%)</title><rect x="1155.3" y="253" width="3.5" height="15.0" fill="rgb(243,178,42)" rx="2" ry="2" />
+<text  x="1158.29" y="263.5" ></text>
+</g>
+<g >
+<title>L115: return Vector(self.x - other.x, self.y - other.y, self.z - other.z) (33 samples, 0.55%)</title><rect x="675.9" y="173" width="6.5" height="15.0" fill="rgb(240,162,38)" rx="2" ry="2" />
+<text  x="678.88" y="183.5" ></text>
+</g>
+<g >
+<title>scale (2 samples, 0.03%)</title><rect x="528.2" y="189" width="0.4" height="15.0" fill="rgb(254,227,54)" rx="2" ry="2" />
+<text  x="531.24" y="199.5" ></text>
+</g>
+<g >
+<title>__sub__ (18 samples, 0.30%)</title><rect x="542.4" y="173" width="3.5" height="15.0" fill="rgb(227,101,24)" rx="2" ry="2" />
+<text  x="545.35" y="183.5" ></text>
+</g>
+<g >
+<title>mustBeVector (1 samples, 0.02%)</title><rect x="425.7" y="205" width="0.2" height="15.0" fill="rgb(232,125,29)" rx="2" ry="2" />
+<text  x="428.69" y="215.5" ></text>
+</g>
+<g >
+<title>L328: if contribution &gt; 0: (8 samples, 0.13%)</title><rect x="374.9" y="253" width="1.6" height="15.0" fill="rgb(209,18,4)" rx="2" ry="2" />
+<text  x="377.90" y="263.5" ></text>
+</g>
+<g >
+<title>normalAt (11 samples, 0.18%)</title><rect x="726.9" y="237" width="2.1" height="15.0" fill="rgb(251,215,51)" rx="2" ry="2" />
+<text  x="729.86" y="247.5" ></text>
+</g>
+<g >
+<title>L52: other.mustBeVector() (3 samples, 0.05%)</title><rect x="597.8" y="93" width="0.6" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
+<text  x="600.84" y="103.5" ></text>
+</g>
+<g >
+<title>dot (143 samples, 2.38%)</title><rect x="489.2" y="205" width="28.1" height="15.0" fill="rgb(251,212,50)" rx="2" ry="2" />
+<text  x="492.22" y="215.5" >dot</text>
+</g>
+<g >
+<title>_lightIsVisible (2,076 samples, 34.50%)</title><rect x="746.7" y="237" width="407.0" height="15.0" fill="rgb(234,136,32)" rx="2" ry="2" />
+<text  x="749.67" y="247.5" >_lightIsVisible</text>
+</g>
+<g >
+<title>dot (2 samples, 0.03%)</title><rect x="560.8" y="141" width="0.4" height="15.0" fill="rgb(251,212,50)" rx="2" ry="2" />
+<text  x="563.78" y="151.5" ></text>
+</g>
+<g >
+<title>L351: + int(abs(v.z) + 0.5)) % 2): (6 samples, 0.10%)</title><rect x="411.2" y="237" width="1.2" height="15.0" fill="rgb(212,36,8)" rx="2" ry="2" />
+<text  x="414.18" y="247.5" ></text>
+</g>
+<g >
+<title>L49: return Vector(factor * self.x, factor * self.y, factor * self.z) (13 samples, 0.22%)</title><rect x="1173.9" y="237" width="2.6" height="15.0" fill="rgb(253,224,53)" rx="2" ry="2" />
+<text  x="1176.92" y="247.5" ></text>
+</g>
+<g >
+<title>L53: return (self.x * other.x) + (self.y * other.y) + (self.z * other.z) (1 samples, 0.02%)</title><rect x="532.4" y="205" width="0.1" height="15.0" fill="rgb(205,1,0)" rx="2" ry="2" />
+<text  x="535.35" y="215.5" ></text>
+</g>
+<g >
+<title>visibleLights (2,098 samples, 34.86%)</title><rect x="742.4" y="253" width="411.3" height="15.0" fill="rgb(219,68,16)" rx="2" ry="2" />
+<text  x="745.35" y="263.5" >visibleLights</text>
+</g>
+<g >
+<title>L149: return v - math.sqrt(discriminant) (2 samples, 0.03%)</title><rect x="464.3" y="205" width="0.4" height="15.0" fill="rgb(224,89,21)" rx="2" ry="2" />
+<text  x="467.31" y="215.5" ></text>
+</g>
+<g >
+<title>L114: if other.isPoint(): (3 samples, 0.05%)</title><rect x="571.0" y="125" width="0.6" height="15.0" fill="rgb(212,36,8)" rx="2" ry="2" />
+<text  x="573.98" y="135.5" ></text>
+</g>
+<g >
+<title>scale (15 samples, 0.25%)</title><rect x="739.4" y="237" width="3.0" height="15.0" fill="rgb(254,227,54)" rx="2" ry="2" />
+<text  x="742.41" y="247.5" ></text>
+</g>
+<g >
+<title>L49: return Vector(factor * self.x, factor * self.y, factor * self.z) (2 samples, 0.03%)</title><rect x="578.4" y="125" width="0.4" height="15.0" fill="rgb(253,224,53)" rx="2" ry="2" />
+<text  x="581.43" y="135.5" ></text>
+</g>
+<g >
+<title>L26: self.y = inity (4 samples, 0.07%)</title><rect x="622.0" y="109" width="0.7" height="15.0" fill="rgb(233,128,30)" rx="2" ry="2" />
+<text  x="624.96" y="119.5" ></text>
+</g>
+<g >
+<title>L115: return Vector(self.x - other.x, self.y - other.y, self.z - other.z) (1 samples, 0.02%)</title><rect x="583.1" y="93" width="0.2" height="15.0" fill="rgb(240,162,38)" rx="2" ry="2" />
+<text  x="586.14" y="103.5" ></text>
+</g>
+<g >
+<title>reflectThrough (4 samples, 0.07%)</title><rect x="584.9" y="189" width="0.8" height="15.0" fill="rgb(215,49,11)" rx="2" ry="2" />
+<text  x="587.90" y="199.5" ></text>
+</g>
+<g >
+<title>scale (4 samples, 0.07%)</title><rect x="534.5" y="205" width="0.8" height="15.0" fill="rgb(254,227,54)" rx="2" ry="2" />
+<text  x="537.51" y="215.5" ></text>
+</g>
+<g >
+<title>render (6,001 samples, 99.72%)</title><rect x="13.3" y="301" width="1176.7" height="15.0" fill="rgb(229,111,26)" rx="2" ry="2" />
+<text  x="16.33" y="311.5" >render</text>
+</g>
+<g >
+<title>L49: return Vector(factor * self.x, factor * self.y, factor * self.z) (4 samples, 0.07%)</title><rect x="534.5" y="189" width="0.8" height="15.0" fill="rgb(253,224,53)" rx="2" ry="2" />
+<text  x="537.51" y="199.5" ></text>
+</g>
+<g >
+<title>L62: return self.scale(1.0 / self.magnitude()) (34 samples, 0.56%)</title><rect x="652.7" y="157" width="6.7" height="15.0" fill="rgb(238,153,36)" rx="2" ry="2" />
+<text  x="655.75" y="167.5" ></text>
+</g>
+<g >
+<title>mustBeVector (6 samples, 0.10%)</title><rect x="516.1" y="189" width="1.2" height="15.0" fill="rgb(232,125,29)" rx="2" ry="2" />
+<text  x="519.08" y="199.5" ></text>
+</g>
+<g >
+<title>L285: t = o.intersectionTime(Ray(p, l - p)) (6 samples, 0.10%)</title><rect x="579.6" y="125" width="1.2" height="15.0" fill="rgb(224,87,21)" rx="2" ry="2" />
+<text  x="582.61" y="135.5" ></text>
+</g>
+<g >
+<title>L267: if self.recursionDepth &gt; 3: (6 samples, 0.10%)</title><rect x="517.3" y="237" width="1.1" height="15.0" fill="rgb(247,194,46)" rx="2" ry="2" />
+<text  x="520.25" y="247.5" ></text>
+</g>
+<g >
+<title>L146: if discriminant &lt; 0: (13 samples, 0.22%)</title><rect x="1042.5" y="205" width="2.6" height="15.0" fill="rgb(209,19,4)" rx="2" ry="2" />
+<text  x="1045.55" y="215.5" ></text>
+</g>
+<g >
+<title>magnitude (44 samples, 0.73%)</title><rect x="72.2" y="253" width="8.6" height="15.0" fill="rgb(224,91,21)" rx="2" ry="2" />
+<text  x="75.16" y="263.5" ></text>
+</g>
+<g >
+<title>__sub__ (5 samples, 0.08%)</title><rect x="1164.9" y="253" width="1.0" height="15.0" fill="rgb(227,101,24)" rx="2" ry="2" />
+<text  x="1167.90" y="263.5" ></text>
+</g>
+<g >
+<title>visibleLights (453 samples, 7.53%)</title><rect x="633.5" y="221" width="88.9" height="15.0" fill="rgb(219,68,16)" rx="2" ry="2" />
+<text  x="636.53" y="231.5" >visibleLig..</text>
+</g>
+<g >
+<title>dot (9 samples, 0.15%)</title><rect x="563.3" y="189" width="1.8" height="15.0" fill="rgb(251,212,50)" rx="2" ry="2" />
+<text  x="566.33" y="199.5" ></text>
+</g>
+<g >
+<title>L178: self.point = point (13 samples, 0.22%)</title><rect x="64.7" y="269" width="2.6" height="15.0" fill="rgb(243,177,42)" rx="2" ry="2" />
+<text  x="67.71" y="279.5" ></text>
+</g>
+<g >
+<title>L114: if other.isPoint(): (47 samples, 0.78%)</title><rect x="944.1" y="205" width="9.2" height="15.0" fill="rgb(212,36,8)" rx="2" ry="2" />
+<text  x="947.12" y="215.5" ></text>
+</g>
+<g >
+<title>L52: other.mustBeVector() (9 samples, 0.15%)</title><rect x="415.5" y="237" width="1.8" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
+<text  x="418.49" y="247.5" ></text>
+</g>
+<g >
+<title>L27: self.z = initz (13 samples, 0.22%)</title><rect x="430.8" y="205" width="2.5" height="15.0" fill="rgb(213,39,9)" rx="2" ry="2" />
+<text  x="433.78" y="215.5" ></text>
+</g>
+<g >
+<title>scale (5 samples, 0.08%)</title><rect x="728.0" y="205" width="1.0" height="15.0" fill="rgb(254,227,54)" rx="2" ry="2" />
+<text  x="731.04" y="215.5" ></text>
+</g>
+<g >
+<title>L27: self.z = initz (14 samples, 0.23%)</title><rect x="60.6" y="253" width="2.7" height="15.0" fill="rgb(213,39,9)" rx="2" ry="2" />
+<text  x="63.59" y="263.5" ></text>
+</g>
+<g >
+<title>firstIntersection (50 samples, 0.83%)</title><rect x="1153.7" y="269" width="9.8" height="15.0" fill="rgb(237,147,35)" rx="2" ry="2" />
+<text  x="1156.73" y="279.5" ></text>
+</g>
+<g >
+<title>__init__ (3 samples, 0.05%)</title><rect x="561.8" y="141" width="0.6" height="15.0" fill="rgb(242,171,41)" rx="2" ry="2" />
+<text  x="564.76" y="151.5" ></text>
+</g>
+<g >
+<title>L284: for (o, s) in self.objects: (17 samples, 0.28%)</title><rect x="746.7" y="221" width="3.3" height="15.0" fill="rgb(232,125,29)" rx="2" ry="2" />
+<text  x="749.67" y="231.5" ></text>
+</g>
+<g >
+<title>L49: return Vector(factor * self.x, factor * self.y, factor * self.z) (1 samples, 0.02%)</title><rect x="730.2" y="205" width="0.2" height="15.0" fill="rgb(253,224,53)" rx="2" ry="2" />
+<text  x="733.20" y="215.5" ></text>
+</g>
+<g >
+<title>__sub__ (248 samples, 4.12%)</title><rect x="1047.1" y="205" width="48.6" height="15.0" fill="rgb(227,101,24)" rx="2" ry="2" />
+<text  x="1050.06" y="215.5" >__su..</text>
+</g>
+<g >
+<title>mustBeVector (1 samples, 0.02%)</title><rect x="669.2" y="125" width="0.2" height="15.0" fill="rgb(232,125,29)" rx="2" ry="2" />
+<text  x="672.22" y="135.5" ></text>
+</g>
+<g >
+<title>dot (7 samples, 0.12%)</title><rect x="597.8" y="109" width="1.4" height="15.0" fill="rgb(251,212,50)" rx="2" ry="2" />
+<text  x="600.84" y="119.5" ></text>
+</g>
+<g >
+<title>scale (11 samples, 0.18%)</title><rect x="631.4" y="205" width="2.1" height="15.0" fill="rgb(254,227,54)" rx="2" ry="2" />
+<text  x="634.37" y="215.5" ></text>
+</g>
+<g >
+<title>normalized (68 samples, 1.13%)</title><rect x="420.0" y="253" width="13.3" height="15.0" fill="rgb(206,5,1)" rx="2" ry="2" />
+<text  x="423.00" y="263.5" ></text>
+</g>
+<g >
+<title>normalized (5 samples, 0.08%)</title><rect x="728.0" y="221" width="1.0" height="15.0" fill="rgb(206,5,1)" rx="2" ry="2" />
+<text  x="731.04" y="231.5" ></text>
+</g>
+<g >
+<title>__init__ (10 samples, 0.17%)</title><rect x="1171.8" y="237" width="1.9" height="15.0" fill="rgb(242,171,41)" rx="2" ry="2" />
+<text  x="1174.76" y="247.5" ></text>
+</g>
+<g >
+<title>firstIntersection (3 samples, 0.05%)</title><rect x="583.9" y="173" width="0.6" height="15.0" fill="rgb(237,147,35)" rx="2" ry="2" />
+<text  x="586.92" y="183.5" ></text>
+</g>
+<g >
+<title>L26: self.y = inity (10 samples, 0.17%)</title><rect x="992.7" y="189" width="2.0" height="15.0" fill="rgb(233,128,30)" rx="2" ry="2" />
+<text  x="995.75" y="199.5" ></text>
+</g>
+<g >
+<title>L149: return v - math.sqrt(discriminant) (4 samples, 0.07%)</title><rect x="541.6" y="173" width="0.8" height="15.0" fill="rgb(224,89,21)" rx="2" ry="2" />
+<text  x="544.57" y="183.5" ></text>
+</g>
+<g >
+<title>L62: return self.scale(1.0 / self.magnitude()) (98 samples, 1.63%)</title><rect x="835.9" y="189" width="19.2" height="15.0" fill="rgb(238,153,36)" rx="2" ry="2" />
+<text  x="838.88" y="199.5" ></text>
+</g>
+<g >
+<title>__init__ (6 samples, 0.10%)</title><rect x="601.8" y="109" width="1.1" height="15.0" fill="rgb(242,171,41)" rx="2" ry="2" />
+<text  x="604.76" y="119.5" ></text>
+</g>
+<g >
+<title>addColours (9 samples, 0.15%)</title><rect x="529.6" y="221" width="1.8" height="15.0" fill="rgb(245,185,44)" rx="2" ry="2" />
+<text  x="532.61" y="231.5" ></text>
+</g>
+<g >
+<title>__init__ (37 samples, 0.61%)</title><rect x="381.2" y="253" width="7.2" height="15.0" fill="rgb(242,171,41)" rx="2" ry="2" />
+<text  x="384.18" y="263.5" ></text>
+</g>
+<g >
+<title>L218: if result is None or candidateT &lt; result[1]: (1 samples, 0.02%)</title><rect x="726.7" y="221" width="0.2" height="15.0" fill="rgb(242,172,41)" rx="2" ry="2" />
+<text  x="729.67" y="231.5" ></text>
+</g>
+<g >
+<title>dot (2 samples, 0.03%)</title><rect x="583.5" y="109" width="0.4" height="15.0" fill="rgb(251,212,50)" rx="2" ry="2" />
+<text  x="586.53" y="119.5" ></text>
+</g>
+<g >
+<title>dot (375 samples, 6.23%)</title><rect x="271.8" y="237" width="73.5" height="15.0" fill="rgb(251,212,50)" rx="2" ry="2" />
+<text  x="274.76" y="247.5" >dot</text>
+</g>
+<g >
+<title>__init__ (4 samples, 0.07%)</title><rect x="736.9" y="221" width="0.7" height="15.0" fill="rgb(242,171,41)" rx="2" ry="2" />
+<text  x="739.86" y="231.5" ></text>
+</g>
+<g >
+<title>magnitude (5 samples, 0.08%)</title><rect x="533.5" y="205" width="1.0" height="15.0" fill="rgb(224,91,21)" rx="2" ry="2" />
+<text  x="536.53" y="215.5" ></text>
+</g>
+<g >
+<title>L25: self.x = initx (24 samples, 0.40%)</title><rect x="1181.4" y="253" width="4.7" height="15.0" fill="rgb(252,218,52)" rx="2" ry="2" />
+<text  x="1184.37" y="263.5" ></text>
+</g>
+<g >
+<title>dot (34 samples, 0.56%)</title><rect x="662.7" y="141" width="6.7" height="15.0" fill="rgb(251,212,50)" rx="2" ry="2" />
+<text  x="665.75" y="151.5" ></text>
+</g>
+<g >
+<title>L167: return 1 / -v (14 samples, 0.23%)</title><rect x="201.8" y="237" width="2.7" height="15.0" fill="rgb(236,143,34)" rx="2" ry="2" />
+<text  x="204.76" y="247.5" ></text>
+</g>
+<g >
+<title>L53: return (self.x * other.x) + (self.y * other.y) + (self.z * other.z) (10 samples, 0.17%)</title><rect x="574.5" y="125" width="2.0" height="15.0" fill="rgb(205,1,0)" rx="2" ry="2" />
+<text  x="577.51" y="135.5" ></text>
+</g>
+<g >
+<title>L46: return Vector(self.x - other.x, self.y - other.y, self.z - other.z) (10 samples, 0.17%)</title><rect x="734.9" y="221" width="2.0" height="15.0" fill="rgb(230,119,28)" rx="2" ry="2" />
+<text  x="737.90" y="231.5" ></text>
+</g>
+<g >
+<title>L36: return math.sqrt(self.dot(self)) (1 samples, 0.02%)</title><rect x="582.0" y="77" width="0.2" height="15.0" fill="rgb(247,195,46)" rx="2" ry="2" />
+<text  x="584.96" y="87.5" ></text>
+</g>
+<g >
+<title>pointAtTime (5 samples, 0.08%)</title><rect x="628.0" y="205" width="1.0" height="15.0" fill="rgb(238,151,36)" rx="2" ry="2" />
+<text  x="631.04" y="215.5" ></text>
+</g>
+<g >
+<title>__init__ (2 samples, 0.03%)</title><rect x="1176.5" y="237" width="0.4" height="15.0" fill="rgb(242,171,41)" rx="2" ry="2" />
+<text  x="1179.47" y="247.5" ></text>
+</g>
+<g >
+<title>L326: for lightPoint in scene.visibleLights(p): (1 samples, 0.02%)</title><rect x="557.5" y="189" width="0.1" height="15.0" fill="rgb(223,86,20)" rx="2" ry="2" />
+<text  x="560.45" y="199.5" ></text>
+</g>
+<g >
+<title>L285: t = o.intersectionTime(Ray(p, l - p)) (308 samples, 5.12%)</title><rect x="750.0" y="221" width="60.4" height="15.0" fill="rgb(224,87,21)" rx="2" ry="2" />
+<text  x="753.00" y="231.5" >L285: ..</text>
+</g>
+<g >
+<title>L27: self.z = initz (18 samples, 0.30%)</title><rect x="1186.5" y="253" width="3.5" height="15.0" fill="rgb(213,39,9)" rx="2" ry="2" />
+<text  x="1189.47" y="263.5" ></text>
+</g>
+<g >
+<title>L274: if i is None: (4 samples, 0.07%)</title><rect x="521.0" y="237" width="0.8" height="15.0" fill="rgb(211,30,7)" rx="2" ry="2" />
+<text  x="523.98" y="247.5" ></text>
+</g>
+<g >
+<title>L293: if self._lightIsVisible(l, p): (1 samples, 0.02%)</title><rect x="633.5" y="205" width="0.2" height="15.0" fill="rgb(238,154,37)" rx="2" ry="2" />
+<text  x="636.53" y="215.5" ></text>
+</g>
+<g >
+<title>L115: return Vector(self.x - other.x, self.y - other.y, self.z - other.z) (2 samples, 0.03%)</title><rect x="727.5" y="205" width="0.3" height="15.0" fill="rgb(240,162,38)" rx="2" ry="2" />
+<text  x="730.45" y="215.5" ></text>
+</g>
+<g >
+<title>__add__ (109 samples, 1.81%)</title><rect x="43.3" y="285" width="21.4" height="15.0" fill="rgb(240,161,38)" rx="2" ry="2" />
+<text  x="46.33" y="295.5" >_..</text>
+</g>
+<g >
+<title>L327: contribution = (lightPoint - p).normalized().dot(normal) (28 samples, 0.47%)</title><rect x="369.4" y="253" width="5.5" height="15.0" fill="rgb(212,33,7)" rx="2" ry="2" />
+<text  x="372.41" y="263.5" ></text>
+</g>
+<g >
+<title>L53: return (self.x * other.x) + (self.y * other.y) + (self.z * other.z) (9 samples, 0.15%)</title><rect x="737.6" y="221" width="1.8" height="15.0" fill="rgb(205,1,0)" rx="2" ry="2" />
+<text  x="740.65" y="231.5" ></text>
+</g>
+<g >
+<title>&lt;listcomp&gt; (428 samples, 7.11%)</title><rect x="433.3" y="237" width="84.0" height="15.0" fill="rgb(223,82,19)" rx="2" ry="2" />
+<text  x="436.33" y="247.5" >&lt;listcomp&gt;</text>
+</g>
+<g >
+<title>L185: return self.point + self.vector.scale(t) (6 samples, 0.10%)</title><rect x="1166.5" y="253" width="1.1" height="15.0" fill="rgb(218,63,15)" rx="2" ry="2" />
+<text  x="1169.47" y="263.5" ></text>
+</g>
+<g >
+<title>L145: discriminant = (self.radius * self.radius) - (cp.dot(cp) - v * v) (6 samples, 0.10%)</title><rect x="613.7" y="141" width="1.2" height="15.0" fill="rgb(210,23,5)" rx="2" ry="2" />
+<text  x="616.73" y="151.5" ></text>
+</g>
+<g >
+<title>L271: intersections = [(o, o.intersectionTime(ray), s) (121 samples, 2.01%)</title><rect x="121.6" y="253" width="23.7" height="15.0" fill="rgb(248,202,48)" rx="2" ry="2" />
+<text  x="124.57" y="263.5" >L..</text>
+</g>
+<g >
+<title>intersectionTime (1,013 samples, 16.83%)</title><rect x="146.7" y="253" width="198.6" height="15.0" fill="rgb(218,63,15)" rx="2" ry="2" />
+<text  x="149.67" y="263.5" >intersectionTime</text>
+</g>
+<g >
+<title>L167: return 1 / -v (5 samples, 0.08%)</title><rect x="466.1" y="205" width="1.0" height="15.0" fill="rgb(236,143,34)" rx="2" ry="2" />
+<text  x="469.08" y="215.5" ></text>
+</g>
+<g >
+<title>L261: ycomp = vpUp.scale(y * pixelHeight - halfHeight) (10 samples, 0.17%)</title><rect x="19.2" y="285" width="2.0" height="15.0" fill="rgb(224,88,21)" rx="2" ry="2" />
+<text  x="22.22" y="295.5" ></text>
+</g>
+<g >
+<title>scale (2 samples, 0.03%)</title><rect x="584.5" y="157" width="0.4" height="15.0" fill="rgb(254,227,54)" rx="2" ry="2" />
+<text  x="587.51" y="167.5" ></text>
+</g>
+<g >
+<title>pointAtTime (2 samples, 0.03%)</title><rect x="584.5" y="173" width="0.4" height="15.0" fill="rgb(238,151,36)" rx="2" ry="2" />
+<text  x="587.51" y="183.5" ></text>
+</g>
+<g >
+<title>L166: if v: (1 samples, 0.02%)</title><rect x="570.4" y="141" width="0.2" height="15.0" fill="rgb(246,189,45)" rx="2" ry="2" />
+<text  x="573.39" y="151.5" ></text>
+</g>
+<g >
+<title>mustBeVector (13 samples, 0.22%)</title><rect x="1151.2" y="189" width="2.5" height="15.0" fill="rgb(232,125,29)" rx="2" ry="2" />
+<text  x="1154.18" y="199.5" ></text>
+</g>
+<g >
+<title>L330: lambertAmount = min(1, lambertAmount) (9 samples, 0.15%)</title><rect x="558.8" y="189" width="1.8" height="15.0" fill="rgb(227,105,25)" rx="2" ry="2" />
+<text  x="561.82" y="199.5" ></text>
+</g>
+<g >
+<title>L203: self.bytes[i + 1] = max(0, min(255, int(g * 255))) (44 samples, 0.73%)</title><rect x="103.3" y="269" width="8.7" height="15.0" fill="rgb(223,85,20)" rx="2" ry="2" />
+<text  x="106.33" y="279.5" ></text>
+</g>
+<g >
+<title>L301: a[2] + scale * b[2]) (2 samples, 0.03%)</title><rect x="531.0" y="205" width="0.4" height="15.0" fill="rgb(252,217,52)" rx="2" ry="2" />
+<text  x="533.98" y="215.5" ></text>
+</g>
+<g >
+<title>L286: if t is not None and t &gt; EPSILON: (14 samples, 0.23%)</title><rect x="810.4" y="221" width="2.7" height="15.0" fill="rgb(252,216,51)" rx="2" ry="2" />
+<text  x="813.39" y="231.5" ></text>
+</g>
+<g >
+<title>L216: candidateT = i[1] (9 samples, 0.15%)</title><rect x="723.9" y="221" width="1.8" height="15.0" fill="rgb(243,178,42)" rx="2" ry="2" />
+<text  x="726.92" y="231.5" ></text>
+</g>
+<g >
+<title>rayColour (94 samples, 1.56%)</title><rect x="566.5" y="189" width="18.4" height="15.0" fill="rgb(212,32,7)" rx="2" ry="2" />
+<text  x="569.47" y="199.5" ></text>
+</g>
+<g >
+<title>L114: if other.isPoint(): (1 samples, 0.02%)</title><rect x="528.6" y="205" width="0.2" height="15.0" fill="rgb(212,36,8)" rx="2" ry="2" />
+<text  x="531.63" y="215.5" ></text>
+</g>
+<g >
+<title>__sub__ (55 samples, 0.91%)</title><rect x="388.4" y="253" width="10.8" height="15.0" fill="rgb(227,101,24)" rx="2" ry="2" />
+<text  x="391.43" y="263.5" ></text>
+</g>
+<g >
+<title>L179: self.vector = vector.normalized() (3 samples, 0.05%)</title><rect x="381.6" y="237" width="0.6" height="15.0" fill="rgb(252,219,52)" rx="2" ry="2" />
+<text  x="384.57" y="247.5" ></text>
+</g>
+<g >
+<title>L286: if t is not None and t &gt; EPSILON: (4 samples, 0.07%)</title><rect x="647.6" y="189" width="0.8" height="15.0" fill="rgb(252,216,51)" rx="2" ry="2" />
+<text  x="650.65" y="199.5" ></text>
+</g>
+<g >
+<title>L27: self.z = initz (1 samples, 0.02%)</title><rect x="585.5" y="141" width="0.2" height="15.0" fill="rgb(213,39,9)" rx="2" ry="2" />
+<text  x="588.49" y="151.5" ></text>
+</g>
+<g >
+<title>__init__ (5 samples, 0.08%)</title><rect x="572.9" y="125" width="1.0" height="15.0" fill="rgb(242,171,41)" rx="2" ry="2" />
+<text  x="575.94" y="135.5" ></text>
+</g>
+<g >
+<title>L114: if other.isPoint(): (13 samples, 0.22%)</title><rect x="673.3" y="173" width="2.6" height="15.0" fill="rgb(212,36,8)" rx="2" ry="2" />
+<text  x="676.33" y="183.5" ></text>
+</g>
+<g >
+<title>magnitude (15 samples, 0.25%)</title><rect x="422.9" y="237" width="3.0" height="15.0" fill="rgb(224,91,21)" rx="2" ry="2" />
+<text  x="425.94" y="247.5" ></text>
+</g>
+<g >
+<title>L53: return (self.x * other.x) + (self.y * other.y) + (self.z * other.z) (42 samples, 0.70%)</title><rect x="713.3" y="157" width="8.3" height="15.0" fill="rgb(205,1,0)" rx="2" ry="2" />
+<text  x="716.33" y="167.5" ></text>
+</g>
+<g >
+<title>L220: return result (1 samples, 0.02%)</title><rect x="1163.3" y="253" width="0.2" height="15.0" fill="rgb(252,219,52)" rx="2" ry="2" />
+<text  x="1166.33" y="263.5" ></text>
+</g>
+<g >
+<title>scale (38 samples, 0.63%)</title><rect x="425.9" y="237" width="7.4" height="15.0" fill="rgb(254,227,54)" rx="2" ry="2" />
+<text  x="428.88" y="247.5" ></text>
+</g>
+<g >
+<title>L49: return Vector(factor * self.x, factor * self.y, factor * self.z) (13 samples, 0.22%)</title><rect x="739.4" y="221" width="2.6" height="15.0" fill="rgb(253,224,53)" rx="2" ry="2" />
+<text  x="742.41" y="231.5" ></text>
+</g>
+<g >
+<title>L281: self.recursionDepth = self.recursionDepth - (14 samples, 0.23%; +0.22%)</title><rect x="356.1" y="269" width="2.7" height="15.0" fill="rgb(255,198,198)" rx="2" ry="2" />
+<text  x="359.08" y="279.5" ></text>
+</g>
+<g >
+<title>L115: return Vector(self.x - other.x, self.y - other.y, self.z - other.z) (6 samples, 0.10%)</title><rect x="413.5" y="221" width="1.2" height="15.0" fill="rgb(240,162,38)" rx="2" ry="2" />
+<text  x="416.53" y="231.5" ></text>
+</g>
+<g >
+<title>magnitude (4 samples, 0.07%)</title><rect x="565.3" y="173" width="0.8" height="15.0" fill="rgb(224,91,21)" rx="2" ry="2" />
+<text  x="568.29" y="183.5" ></text>
+</g>
+<g >
+<title>L264: canvas.plot(x, y, *colour) (35 samples, 0.58%)</title><rect x="36.5" y="285" width="6.8" height="15.0" fill="rgb(243,176,42)" rx="2" ry="2" />
+<text  x="39.47" y="295.5" ></text>
+</g>
+<g >
+<title>L292: for l in self.lightPoints: (4 samples, 0.07%)</title><rect x="742.5" y="237" width="0.8" height="15.0" fill="rgb(206,8,1)" rx="2" ry="2" />
+<text  x="745.55" y="247.5" ></text>
+</g>
+<g >
+<title>normalized (14 samples, 0.23%)</title><rect x="532.5" y="221" width="2.8" height="15.0" fill="rgb(206,5,1)" rx="2" ry="2" />
+<text  x="535.55" y="231.5" ></text>
+</g>
+<g >
+<title>colourAt (1,018 samples, 16.92%)</title><rect x="522.7" y="237" width="199.7" height="15.0" fill="rgb(230,118,28)" rx="2" ry="2" />
+<text  x="525.75" y="247.5" >colourAt</text>
+</g>
+<g >
+<title>firstIntersection (3 samples, 0.05%)</title><rect x="627.3" y="205" width="0.5" height="15.0" fill="rgb(237,147,35)" rx="2" ry="2" />
+<text  x="630.25" y="215.5" ></text>
+</g>
+<g >
+<title>__add__ (3 samples, 0.05%)</title><rect x="729.6" y="221" width="0.6" height="15.0" fill="rgb(240,161,38)" rx="2" ry="2" />
+<text  x="732.61" y="231.5" ></text>
+</g>
+<g >
+<title>L49: return Vector(factor * self.x, factor * self.y, factor * self.z) (2 samples, 0.03%)</title><rect x="728.0" y="189" width="0.4" height="15.0" fill="rgb(253,224,53)" rx="2" ry="2" />
+<text  x="731.04" y="199.5" ></text>
+</g>
+<g >
+<title>L272: for (o, s) in self.objects] (9 samples, 0.15%)</title><rect x="441.0" y="221" width="1.7" height="15.0" fill="rgb(225,94,22)" rx="2" ry="2" />
+<text  x="443.98" y="231.5" ></text>
+</g>
+<g >
+<title>scale (5 samples, 0.08%)</title><rect x="582.2" y="93" width="0.9" height="15.0" fill="rgb(254,227,54)" rx="2" ry="2" />
+<text  x="585.16" y="103.5" ></text>
+</g>
+<g >
+<title>__init__ (1 samples, 0.02%)</title><rect x="582.9" y="77" width="0.2" height="15.0" fill="rgb(242,171,41)" rx="2" ry="2" />
+<text  x="585.94" y="87.5" ></text>
+</g>
+<g >
+<title>__sub__ (1 samples, 0.02%)</title><rect x="532.2" y="205" width="0.2" height="15.0" fill="rgb(227,101,24)" rx="2" ry="2" />
+<text  x="535.16" y="215.5" ></text>
+</g>
+<g >
+<title>L216: candidateT = i[1] (3 samples, 0.05%)</title><rect x="583.9" y="157" width="0.6" height="15.0" fill="rgb(243,178,42)" rx="2" ry="2" />
+<text  x="586.92" y="167.5" ></text>
+</g>
+<g >
+<title>L25: self.x = initx (1 samples, 0.02%)</title><rect x="582.9" y="61" width="0.2" height="15.0" fill="rgb(252,218,52)" rx="2" ry="2" />
+<text  x="585.94" y="71.5" ></text>
+</g>
+<g >
+<title>L204: self.bytes[i + 2] = max(0, min(255, int(b * 255))) (49 samples, 0.81%)</title><rect x="112.0" y="269" width="9.6" height="15.0" fill="rgb(242,174,41)" rx="2" ry="2" />
+<text  x="114.96" y="279.5" ></text>
+</g>
+<g >
+<title>L123: return True (4 samples, 0.07%)</title><rect x="610.6" y="125" width="0.8" height="15.0" fill="rgb(237,147,35)" rx="2" ry="2" />
+<text  x="613.59" y="135.5" ></text>
+</g>
+<g >
+<title>L147: return None (2 samples, 0.03%)</title><rect x="541.2" y="173" width="0.4" height="15.0" fill="rgb(251,215,51)" rx="2" ry="2" />
+<text  x="544.18" y="183.5" ></text>
+</g>
+<g >
+<title>intersectionTime (380 samples, 6.31%)</title><rect x="442.7" y="221" width="74.6" height="15.0" fill="rgb(218,63,15)" rx="2" ry="2" />
+<text  x="445.75" y="231.5" >intersec..</text>
+</g>
+<g >
+<title>L27: self.z = initz (22 samples, 0.37%)</title><rect x="1090.6" y="173" width="4.3" height="15.0" fill="rgb(213,39,9)" rx="2" ry="2" />
+<text  x="1093.59" y="183.5" ></text>
+</g>
+<g >
+<title>L25: self.x = initx (13 samples, 0.22%)</title><rect x="682.4" y="157" width="2.5" height="15.0" fill="rgb(252,218,52)" rx="2" ry="2" />
+<text  x="685.35" y="167.5" ></text>
+</g>
+<g >
+<title>L272: for (o, s) in self.objects] (3 samples, 0.05%)</title><rect x="520.0" y="237" width="0.6" height="15.0" fill="rgb(225,94,22)" rx="2" ry="2" />
+<text  x="523.00" y="247.5" ></text>
+</g>
+<g >
+<title>L252: pixelHeight = height / (canvas.height - 1) (1 samples, 0.02%)</title><rect x="13.3" y="285" width="0.2" height="15.0" fill="rgb(241,165,39)" rx="2" ry="2" />
+<text  x="16.33" y="295.5" ></text>
+</g>
+<g >
+<title>dot (8 samples, 0.13%)</title><rect x="424.3" y="221" width="1.6" height="15.0" fill="rgb(251,212,50)" rx="2" ry="2" />
+<text  x="427.31" y="231.5" ></text>
+</g>
+<g >
+<title>L74: return False (7 samples, 0.12%)</title><rect x="63.3" y="253" width="1.4" height="15.0" fill="rgb(230,116,27)" rx="2" ry="2" />
+<text  x="66.33" y="263.5" ></text>
+</g>
+<g >
+<title>baseColourAt (5 samples, 0.08%)</title><rect x="531.4" y="221" width="1.0" height="15.0" fill="rgb(232,126,30)" rx="2" ry="2" />
+<text  x="534.37" y="231.5" ></text>
+</g>
+<g >
+<title>__sub__ (22 samples, 0.37%)</title><rect x="733.3" y="237" width="4.3" height="15.0" fill="rgb(227,101,24)" rx="2" ry="2" />
+<text  x="736.33" y="247.5" ></text>
+</g>
+<g >
+<title>L27: self.z = initz (3 samples, 0.05%)</title><rect x="529.0" y="189" width="0.6" height="15.0" fill="rgb(213,39,9)" rx="2" ry="2" />
+<text  x="532.02" y="199.5" ></text>
+</g>
+<g >
+<title>L77: return self (13 samples, 0.22%)</title><rect x="1151.2" y="173" width="2.5" height="15.0" fill="rgb(230,119,28)" rx="2" ry="2" />
+<text  x="1154.18" y="183.5" ></text>
+</g>
+<g >
+<title>L77: return self (21 samples, 0.35%)</title><rect x="904.3" y="141" width="4.1" height="15.0" fill="rgb(230,119,28)" rx="2" ry="2" />
+<text  x="907.31" y="151.5" ></text>
+</g>
+<g >
+<title>__sub__ (2 samples, 0.03%)</title><rect x="562.4" y="189" width="0.3" height="15.0" fill="rgb(227,101,24)" rx="2" ry="2" />
+<text  x="565.35" y="199.5" ></text>
+</g>
+<g >
+<title>scale (2 samples, 0.03%)</title><rect x="566.1" y="173" width="0.4" height="15.0" fill="rgb(254,227,54)" rx="2" ry="2" />
+<text  x="569.08" y="183.5" ></text>
+</g>
+<g >
+<title>L115: return Vector(self.x - other.x, self.y - other.y, self.z - other.z) (20 samples, 0.33%)</title><rect x="604.1" y="141" width="3.9" height="15.0" fill="rgb(240,162,38)" rx="2" ry="2" />
+<text  x="607.12" y="151.5" ></text>
+</g>
+<g >
+<title>reflectThrough (9 samples, 0.15%)</title><rect x="577.8" y="157" width="1.8" height="15.0" fill="rgb(215,49,11)" rx="2" ry="2" />
+<text  x="580.84" y="167.5" ></text>
+</g>
+<g >
+<title>L166: if v: (1 samples, 0.02%)</title><rect x="1046.7" y="205" width="0.2" height="15.0" fill="rgb(246,189,45)" rx="2" ry="2" />
+<text  x="1049.67" y="215.5" ></text>
+</g>
+<g >
+<title>dot (23 samples, 0.38%)</title><rect x="415.5" y="253" width="4.5" height="15.0" fill="rgb(251,212,50)" rx="2" ry="2" />
+<text  x="418.49" y="263.5" ></text>
+</g>
+<g >
+<title>L53: return (self.x * other.x) + (self.y * other.y) + (self.z * other.z) (18 samples, 0.30%)</title><rect x="665.7" y="125" width="3.5" height="15.0" fill="rgb(205,1,0)" rx="2" ry="2" />
+<text  x="668.69" y="135.5" ></text>
+</g>
+<g >
+<title>L45: other.mustBeVector() (8 samples, 0.13%)</title><rect x="733.3" y="221" width="1.6" height="15.0" fill="rgb(234,133,32)" rx="2" ry="2" />
+<text  x="736.33" y="231.5" ></text>
+</g>
+<g >
+<title>rayColour (478 samples, 7.94%)</title><rect x="535.3" y="221" width="93.7" height="15.0" fill="rgb(212,32,7)" rx="2" ry="2" />
+<text  x="538.29" y="231.5" >rayColour</text>
+</g>
+<g >
+<title>mustBeVector (3 samples, 0.05%)</title><rect x="565.5" y="141" width="0.6" height="15.0" fill="rgb(232,125,29)" rx="2" ry="2" />
+<text  x="568.49" y="151.5" ></text>
+</g>
+<g >
+<title>L114: if other.isPoint(): (6 samples, 0.10%)</title><rect x="602.9" y="141" width="1.2" height="15.0" fill="rgb(212,36,8)" rx="2" ry="2" />
+<text  x="605.94" y="151.5" ></text>
+</g>
+<g >
+<title>L25: self.x = initx (2 samples, 0.03%)</title><rect x="397.6" y="221" width="0.4" height="15.0" fill="rgb(252,218,52)" rx="2" ry="2" />
+<text  x="400.65" y="231.5" ></text>
+</g>
+<g >
+<title>colourAt (4,054 samples, 67.36%)</title><rect x="358.8" y="269" width="794.9" height="15.0" fill="rgb(230,118,28)" rx="2" ry="2" />
+<text  x="361.82" y="279.5" >colourAt</text>
+</g>
+<g >
+<title>L52: other.mustBeVector() (1 samples, 0.02%)</title><rect x="424.3" y="205" width="0.2" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
+<text  x="427.31" y="215.5" ></text>
+</g>
+<g >
+<title>L194: self.bytes = array.array('B', [0] * (width * height * 3)) (6 samples, 0.10%)</title><rect x="10.0" y="285" width="1.2" height="15.0" fill="rgb(238,154,37)" rx="2" ry="2" />
+<text  x="13.00" y="295.5" ></text>
+</g>
+<g >
+<title>L167: return 1 / -v (1 samples, 0.02%)</title><rect x="1046.9" y="205" width="0.2" height="15.0" fill="rgb(236,143,34)" rx="2" ry="2" />
+<text  x="1049.86" y="215.5" ></text>
+</g>
+<g >
+<title>intersectionTime (791 samples, 13.14%)</title><rect x="998.6" y="221" width="155.1" height="15.0" fill="rgb(218,63,15)" rx="2" ry="2" />
+<text  x="1001.63" y="231.5" >intersectionTime</text>
+</g>
+<g >
+<title>scale (1 samples, 0.02%)</title><rect x="1166.3" y="237" width="0.2" height="15.0" fill="rgb(254,227,54)" rx="2" ry="2" />
+<text  x="1169.27" y="247.5" ></text>
+</g>
+<g >
+<title>L215: for i in intersections: (8 samples, 0.13%)</title><rect x="722.4" y="221" width="1.5" height="15.0" fill="rgb(224,91,21)" rx="2" ry="2" />
+<text  x="725.35" y="231.5" ></text>
+</g>
+<g >
+<title>isPoint (3 samples, 0.05%)</title><rect x="686.9" y="173" width="0.6" height="15.0" fill="rgb(220,70,16)" rx="2" ry="2" />
+<text  x="689.86" y="183.5" ></text>
+</g>
+<g >
+<title>isPoint (1 samples, 0.02%)</title><rect x="727.8" y="205" width="0.2" height="15.0" fill="rgb(220,70,16)" rx="2" ry="2" />
+<text  x="730.84" y="215.5" ></text>
+</g>
+<g >
+<title>magnitude (14 samples, 0.23%)</title><rect x="596.5" y="125" width="2.7" height="15.0" fill="rgb(224,91,21)" rx="2" ry="2" />
+<text  x="599.47" y="135.5" ></text>
+</g>
+<g >
+<title>L52: other.mustBeVector() (1 samples, 0.02%)</title><rect x="565.3" y="141" width="0.2" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
+<text  x="568.29" y="151.5" ></text>
+</g>
+<g >
+<title>dot (9 samples, 0.15%)</title><rect x="737.6" y="237" width="1.8" height="15.0" fill="rgb(251,212,50)" rx="2" ry="2" />
+<text  x="740.65" y="247.5" ></text>
+</g>
+<g >
+<title>__init__ (75 samples, 1.25%)</title><rect x="1080.2" y="189" width="14.7" height="15.0" fill="rgb(242,171,41)" rx="2" ry="2" />
+<text  x="1083.20" y="199.5" ></text>
+</g>
+<g >
+<title>isPoint (4 samples, 0.07%)</title><rect x="1094.9" y="189" width="0.8" height="15.0" fill="rgb(220,70,16)" rx="2" ry="2" />
+<text  x="1097.90" y="199.5" ></text>
+</g>
+<g >
+<title>L300: a[1] + scale * b[1], (3 samples, 0.05%)</title><rect x="530.4" y="205" width="0.6" height="15.0" fill="rgb(252,217,52)" rx="2" ry="2" />
+<text  x="533.39" y="215.5" ></text>
+</g>
+<g >
+<title>L53: return (self.x * other.x) + (self.y * other.y) + (self.z * other.z) (12 samples, 0.20%)</title><rect x="78.2" y="221" width="2.4" height="15.0" fill="rgb(205,1,0)" rx="2" ry="2" />
+<text  x="81.24" y="231.5" ></text>
+</g>
+<g >
+<title>L320: reflectedRay = Ray(p, ray.vector.reflectThrough(normal)) (3 samples, 0.05%)</title><rect x="523.1" y="221" width="0.6" height="15.0" fill="rgb(212,36,8)" rx="2" ry="2" />
+<text  x="526.14" y="231.5" ></text>
+</g>
+<g >
+<title>L325: lambertAmount = (3 samples, 0.05%; +0.05%)</title><rect x="556.9" y="189" width="0.6" height="15.0" fill="rgb(255,207,207)" rx="2" ry="2" />
+<text  x="559.86" y="199.5" ></text>
+</g>
+<g >
+<title>__sub__ (18 samples, 0.30%)</title><rect x="571.0" y="141" width="3.5" height="15.0" fill="rgb(227,101,24)" rx="2" ry="2" />
+<text  x="573.98" y="151.5" ></text>
+</g>
+<g >
+<title>L149: return v - math.sqrt(discriminant) (1 samples, 0.02%)</title><rect x="1045.5" y="205" width="0.2" height="15.0" fill="rgb(224,89,21)" rx="2" ry="2" />
+<text  x="1048.49" y="215.5" ></text>
+</g>
+<g >
+<title>L53: return (self.x * other.x) + (self.y * other.y) + (self.z * other.z) (7 samples, 0.12%)</title><rect x="385.1" y="189" width="1.4" height="15.0" fill="rgb(205,1,0)" rx="2" ry="2" />
+<text  x="388.10" y="199.5" ></text>
+</g>
+<g >
+<title>L26: self.y = inity (1 samples, 0.02%)</title><rect x="388.2" y="189" width="0.2" height="15.0" fill="rgb(233,128,30)" rx="2" ry="2" />
+<text  x="391.24" y="199.5" ></text>
+</g>
+<g >
+<title>L45: other.mustBeVector() (1 samples, 0.02%)</title><rect x="630.4" y="189" width="0.2" height="15.0" fill="rgb(234,133,32)" rx="2" ry="2" />
+<text  x="633.39" y="199.5" ></text>
+</g>
+<g >
+<title>L178: self.point = point (11 samples, 0.18%)</title><rect x="648.4" y="173" width="2.2" height="15.0" fill="rgb(243,177,42)" rx="2" ry="2" />
+<text  x="651.43" y="183.5" ></text>
+</g>
+<g >
+<title>intersectionTime (46 samples, 0.76%)</title><rect x="567.5" y="157" width="9.0" height="15.0" fill="rgb(218,63,15)" rx="2" ry="2" />
+<text  x="570.45" y="167.5" ></text>
+</g>
+<g >
+<title>L259: for x in range(canvas.width): (6 samples, 0.10%)</title><rect x="13.5" y="285" width="1.2" height="15.0" fill="rgb(251,215,51)" rx="2" ry="2" />
+<text  x="16.53" y="295.5" ></text>
+</g>
+<g >
+<title>isPoint (7 samples, 0.12%)</title><rect x="63.3" y="269" width="1.4" height="15.0" fill="rgb(220,70,16)" rx="2" ry="2" />
+<text  x="66.33" y="279.5" ></text>
+</g>
+<g >
+<title>L52: other.mustBeVector() (15 samples, 0.25%)</title><rect x="662.7" y="125" width="3.0" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
+<text  x="665.75" y="135.5" ></text>
+</g>
+<g >
+<title>__sub__ (5 samples, 0.08%)</title><rect x="727.1" y="221" width="0.9" height="15.0" fill="rgb(227,101,24)" rx="2" ry="2" />
+<text  x="730.06" y="231.5" ></text>
+</g>
+<g >
+<title>L26: self.y = inity (19 samples, 0.32%)</title><rect x="260.2" y="205" width="3.7" height="15.0" fill="rgb(233,128,30)" rx="2" ry="2" />
+<text  x="263.20" y="215.5" ></text>
+</g>
+<g >
+<title>L25: self.x = initx (1 samples, 0.02%)</title><rect x="583.3" y="77" width="0.2" height="15.0" fill="rgb(252,218,52)" rx="2" ry="2" />
+<text  x="586.33" y="87.5" ></text>
+</g>
+<g >
+<title>L333: if self.ambientCoefficient &gt; 0: (10 samples, 0.17%)</title><rect x="378.2" y="253" width="2.0" height="15.0" fill="rgb(228,106,25)" rx="2" ry="2" />
+<text  x="381.24" y="263.5" ></text>
+</g>
+<g >
+<title>L267: if self.recursionDepth &gt; 3: (12 samples, 0.20%)</title><rect x="345.3" y="269" width="2.3" height="15.0" fill="rgb(247,194,46)" rx="2" ry="2" />
+<text  x="348.29" y="279.5" ></text>
+</g>
+<g >
+<title>L27: self.z = initz (1 samples, 0.02%)</title><rect x="602.7" y="93" width="0.2" height="15.0" fill="rgb(213,39,9)" rx="2" ry="2" />
+<text  x="605.75" y="103.5" ></text>
+</g>
+<g >
+<title>L25: self.x = initx (1 samples, 0.02%)</title><rect x="633.3" y="173" width="0.2" height="15.0" fill="rgb(252,218,52)" rx="2" ry="2" />
+<text  x="636.33" y="183.5" ></text>
+</g>
+<g >
+<title>normalized (11 samples, 0.18%)</title><rect x="581.0" y="109" width="2.1" height="15.0" fill="rgb(206,5,1)" rx="2" ry="2" />
+<text  x="583.98" y="119.5" ></text>
+</g>
+<g >
+<title>L25: self.x = initx (1 samples, 0.02%)</title><rect x="1166.3" y="205" width="0.2" height="15.0" fill="rgb(252,218,52)" rx="2" ry="2" />
+<text  x="1169.27" y="215.5" ></text>
+</g>
+<g >
+<title>L271: intersections = [(o, o.intersectionTime(ray), s) (4 samples, 0.07%)</title><rect x="566.5" y="157" width="0.8" height="15.0" fill="rgb(248,202,48)" rx="2" ry="2" />
+<text  x="569.47" y="167.5" ></text>
+</g>
+<g >
+<title>L284: for (o, s) in self.objects: (1 samples, 0.02%)</title><rect x="585.7" y="157" width="0.2" height="15.0" fill="rgb(232,125,29)" rx="2" ry="2" />
+<text  x="588.69" y="167.5" ></text>
+</g>
+<g >
+<title>intersectionTime (96 samples, 1.60%)</title><rect x="536.1" y="189" width="18.8" height="15.0" fill="rgb(218,63,15)" rx="2" ry="2" />
+<text  x="539.08" y="199.5" ></text>
+</g>
+<g >
+<title>L279: return s.colourAt(self, ray, p, o.normalAt(p)) (1 samples, 0.02%)</title><rect x="521.8" y="237" width="0.2" height="15.0" fill="rgb(235,139,33)" rx="2" ry="2" />
+<text  x="524.76" y="247.5" ></text>
+</g>
+<g >
+<title>scale (67 samples, 1.11%)</title><rect x="1176.9" y="285" width="13.1" height="15.0" fill="rgb(254,227,54)" rx="2" ry="2" />
+<text  x="1179.86" y="295.5" ></text>
+</g>
+<g >
+<title>L26: self.y = inity (11 samples, 0.18%)</title><rect x="58.4" y="253" width="2.2" height="15.0" fill="rgb(233,128,30)" rx="2" ry="2" />
+<text  x="61.43" y="263.5" ></text>
+</g>
+<g >
+<title>scale (1 samples, 0.02%)</title><rect x="730.2" y="221" width="0.2" height="15.0" fill="rgb(254,227,54)" rx="2" ry="2" />
+<text  x="733.20" y="231.5" ></text>
+</g>
+<g >
+<title>&lt;listcomp&gt; (1,141 samples, 18.96%)</title><rect x="121.6" y="269" width="223.7" height="15.0" fill="rgb(223,82,19)" rx="2" ry="2" />
+<text  x="124.57" y="279.5" >&lt;listcomp&gt;</text>
+</g>
+<g >
+<title>L327: contribution = (lightPoint - p).normalized().dot(normal) (10 samples, 0.17%)</title><rect x="524.9" y="221" width="2.0" height="15.0" fill="rgb(212,33,7)" rx="2" ry="2" />
+<text  x="527.90" y="231.5" ></text>
+</g>
+<g >
+<title>__init__ (16 samples, 0.27%)</title><rect x="706.1" y="157" width="3.1" height="15.0" fill="rgb(242,171,41)" rx="2" ry="2" />
+<text  x="709.08" y="167.5" ></text>
+</g>
+<g >
+<title>L53: return (self.x * other.x) + (self.y * other.y) + (self.z * other.z) (4 samples, 0.07%)</title><rect x="598.4" y="93" width="0.8" height="15.0" fill="rgb(205,1,0)" rx="2" ry="2" />
+<text  x="601.43" y="103.5" ></text>
+</g>
+<g >
+<title>L201: i = ((self.height - y - 1) * self.width + x) * (29 samples, 0.48%; +0.43%)</title><rect x="87.6" y="269" width="5.7" height="15.0" fill="rgb(255,187,187)" rx="2" ry="2" />
+<text  x="90.65" y="279.5" ></text>
+</g>
+<g >
+<title>L27: self.z = initz (1 samples, 0.02%)</title><rect x="709.0" y="141" width="0.2" height="15.0" fill="rgb(213,39,9)" rx="2" ry="2" />
+<text  x="712.02" y="151.5" ></text>
+</g>
+<g >
+<title>L291: result = [] (1 samples, 0.02%)</title><rect x="742.4" y="237" width="0.1" height="15.0" fill="rgb(252,219,52)" rx="2" ry="2" />
+<text  x="745.35" y="247.5" ></text>
+</g>
+<g >
+<title>L27: self.z = initz (5 samples, 0.08%)</title><rect x="685.9" y="157" width="1.0" height="15.0" fill="rgb(213,39,9)" rx="2" ry="2" />
+<text  x="688.88" y="167.5" ></text>
+</g>
+<g >
+<title>normalized (7 samples, 0.12%)</title><rect x="565.1" y="189" width="1.4" height="15.0" fill="rgb(206,5,1)" rx="2" ry="2" />
+<text  x="568.10" y="199.5" ></text>
+</g>
+<g >
+<title>L144: v = cp.dot(ray.vector) (13 samples, 0.22%)</title><rect x="689.0" y="173" width="2.6" height="15.0" fill="rgb(238,153,36)" rx="2" ry="2" />
+<text  x="692.02" y="183.5" ></text>
+</g>
+<g >
+<title>L53: return (self.x * other.x) + (self.y * other.y) + (self.z * other.z) (30 samples, 0.50%)</title><rect x="548.4" y="157" width="5.9" height="15.0" fill="rgb(205,1,0)" rx="2" ry="2" />
+<text  x="551.43" y="167.5" ></text>
+</g>
+<g >
+<title>__init__ (668 samples, 11.10%)</title><rect x="813.1" y="221" width="131.0" height="15.0" fill="rgb(242,171,41)" rx="2" ry="2" />
+<text  x="816.14" y="231.5" >__init__</text>
+</g>
+<g >
+<title>L144: v = cp.dot(ray.vector) (22 samples, 0.37%)</title><rect x="448.4" y="205" width="4.3" height="15.0" fill="rgb(238,153,36)" rx="2" ry="2" />
+<text  x="451.43" y="215.5" ></text>
+</g>
+<g >
+<title>__init__ (2 samples, 0.03%)</title><rect x="584.5" y="141" width="0.4" height="15.0" fill="rgb(242,171,41)" rx="2" ry="2" />
+<text  x="587.51" y="151.5" ></text>
+</g>
+<g >
+<title>L299: return (a[0] + scale * b[0], (7 samples, 0.12%)</title><rect x="399.2" y="237" width="1.4" height="15.0" fill="rgb(249,203,48)" rx="2" ry="2" />
+<text  x="402.22" y="247.5" ></text>
+</g>
+<g >
+<title>L178: self.point = point (2 samples, 0.03%)</title><rect x="381.2" y="237" width="0.4" height="15.0" fill="rgb(243,177,42)" rx="2" ry="2" />
+<text  x="384.18" y="247.5" ></text>
+</g>
+<g >
+<title>L26: self.y = inity (2 samples, 0.03%)</title><rect x="1186.1" y="253" width="0.4" height="15.0" fill="rgb(233,128,30)" rx="2" ry="2" />
+<text  x="1189.08" y="263.5" ></text>
+</g>
+<g >
+<title>L143: cp = self.centre - ray.point (7 samples, 0.12%)</title><rect x="611.4" y="141" width="1.3" height="15.0" fill="rgb(224,88,21)" rx="2" ry="2" />
+<text  x="614.37" y="151.5" ></text>
+</g>
+<g >
+<title>L347: v = p - Point.ZERO (17 samples, 0.28%)</title><rect x="404.7" y="237" width="3.3" height="15.0" fill="rgb(236,146,34)" rx="2" ry="2" />
+<text  x="407.71" y="247.5" ></text>
+</g>
+<g >
+<title>L281: self.recursionDepth = self.recursionDepth - (4 samples, 0.07%; +0.05%)</title><rect x="522.0" y="237" width="0.7" height="15.0" fill="rgb(255,207,207)" rx="2" ry="2" />
+<text  x="524.96" y="247.5" ></text>
+</g>
+<g >
+<title>L146: if discriminant &lt; 0: (16 samples, 0.27%)</title><rect x="193.3" y="237" width="3.2" height="15.0" fill="rgb(209,19,4)" rx="2" ry="2" />
+<text  x="196.33" y="247.5" ></text>
+</g>
+<g >
+<title>__init__ (3 samples, 0.05%)</title><rect x="529.0" y="205" width="0.6" height="15.0" fill="rgb(242,171,41)" rx="2" ry="2" />
+<text  x="532.02" y="215.5" ></text>
+</g>
+<g >
+<title>L27: self.z = initz (15 samples, 0.25%)</title><rect x="994.7" y="189" width="2.9" height="15.0" fill="rgb(213,39,9)" rx="2" ry="2" />
+<text  x="997.71" y="199.5" ></text>
+</g>
+<g >
+<title>L144: v = cp.dot(ray.vector) (2 samples, 0.03%)</title><rect x="568.8" y="141" width="0.4" height="15.0" fill="rgb(238,153,36)" rx="2" ry="2" />
+<text  x="571.82" y="151.5" ></text>
+</g>
+<g >
+<title>magnitude (2 samples, 0.03%)</title><rect x="560.8" y="157" width="0.4" height="15.0" fill="rgb(224,91,21)" rx="2" ry="2" />
+<text  x="563.78" y="167.5" ></text>
+</g>
+<g >
+<title>__sub__ (43 samples, 0.71%)</title><rect x="602.9" y="157" width="8.5" height="15.0" fill="rgb(227,101,24)" rx="2" ry="2" />
+<text  x="605.94" y="167.5" ></text>
+</g>
+<g >
+<title>L84: return self - d.scale(2) (11 samples, 0.18%)</title><rect x="731.2" y="237" width="2.1" height="15.0" fill="rgb(241,166,39)" rx="2" ry="2" />
+<text  x="734.18" y="247.5" ></text>
+</g>
+<g >
+<title>L26: self.y = inity (2 samples, 0.03%)</title><rect x="609.0" y="125" width="0.4" height="15.0" fill="rgb(233,128,30)" rx="2" ry="2" />
+<text  x="612.02" y="135.5" ></text>
+</g>
+<g >
+<title>L115: return Vector(self.x - other.x, self.y - other.y, self.z - other.z) (171 samples, 2.84%)</title><rect x="953.3" y="205" width="33.6" height="15.0" fill="rgb(240,162,38)" rx="2" ry="2" />
+<text  x="956.33" y="215.5" >L1..</text>
+</g>
+<g >
+<title>L49: return Vector(factor * self.x, factor * self.y, factor * self.z) (1 samples, 0.02%)</title><rect x="628.8" y="173" width="0.2" height="15.0" fill="rgb(253,224,53)" rx="2" ry="2" />
+<text  x="631.82" y="183.5" ></text>
+</g>
+<g >
+<title>L26: self.y = inity (1 samples, 0.02%)</title><rect x="398.0" y="221" width="0.2" height="15.0" fill="rgb(233,128,30)" rx="2" ry="2" />
+<text  x="401.04" y="231.5" ></text>
+</g>
+<g >
+<title>L145: discriminant = (self.radius * self.radius) - (cp.dot(cp) - v * v) (105 samples, 1.74%)</title><rect x="172.7" y="237" width="20.6" height="15.0" fill="rgb(210,23,5)" rx="2" ry="2" />
+<text  x="175.75" y="247.5" ></text>
+</g>
+<g >
+<title>L301: a[2] + scale * b[2]) (13 samples, 0.22%)</title><rect x="402.2" y="237" width="2.5" height="15.0" fill="rgb(252,217,52)" rx="2" ry="2" />
+<text  x="405.16" y="247.5" ></text>
+</g>
+<g >
+<title>L350: + int(abs(v.y) + 0.5) (6 samples, 0.10%)</title><rect x="410.0" y="237" width="1.2" height="15.0" fill="rgb(205,2,0)" rx="2" ry="2" />
+<text  x="413.00" y="247.5" ></text>
+</g>
+<g >
+<title>L147: return None (2 samples, 0.03%)</title><rect x="1045.1" y="205" width="0.4" height="15.0" fill="rgb(251,215,51)" rx="2" ry="2" />
+<text  x="1048.10" y="215.5" ></text>
+</g>
+<g >
+<title>L49: return Vector(factor * self.x, factor * self.y, factor * self.z) (3 samples, 0.05%)</title><rect x="414.9" y="221" width="0.6" height="15.0" fill="rgb(253,224,53)" rx="2" ry="2" />
+<text  x="417.90" y="231.5" ></text>
+</g>
+<g >
+<title>L53: return (self.x * other.x) + (self.y * other.y) + (self.z * other.z) (3 samples, 0.05%)</title><rect x="564.5" y="173" width="0.6" height="15.0" fill="rgb(205,1,0)" rx="2" ry="2" />
+<text  x="567.51" y="183.5" ></text>
+</g>
+<g >
+<title>L217: if candidateT is not None and candidateT &gt; -EPSILON: (5 samples, 0.08%)</title><rect x="725.7" y="221" width="1.0" height="15.0" fill="rgb(212,35,8)" rx="2" ry="2" />
+<text  x="728.69" y="231.5" ></text>
+</g>
+<g >
+<title>L321: reflectedColour = scene.rayColour(reflectedRay) (10 samples, 0.17%)</title><rect x="363.9" y="253" width="2.0" height="15.0" fill="rgb(229,113,27)" rx="2" ry="2" />
+<text  x="366.92" y="263.5" ></text>
+</g>
+<g >
+<title>normalized (552 samples, 9.17%)</title><rect x="835.9" y="205" width="108.2" height="15.0" fill="rgb(206,5,1)" rx="2" ry="2" />
+<text  x="838.88" y="215.5" >normalized</text>
+</g>
+<g >
+<title>L26: self.y = inity (1 samples, 0.02%)</title><rect x="585.3" y="141" width="0.2" height="15.0" fill="rgb(233,128,30)" rx="2" ry="2" />
+<text  x="588.29" y="151.5" ></text>
+</g>
+<g >
+<title>mustBeVector (4 samples, 0.07%)</title><rect x="721.6" y="157" width="0.8" height="15.0" fill="rgb(232,125,29)" rx="2" ry="2" />
+<text  x="724.57" y="167.5" ></text>
+</g>
+<g >
+<title>__init__ (12 samples, 0.20%)</title><rect x="580.8" y="125" width="2.3" height="15.0" fill="rgb(242,171,41)" rx="2" ry="2" />
+<text  x="583.78" y="135.5" ></text>
+</g>
+<g >
+<title>__init__ (2 samples, 0.03%)</title><rect x="566.1" y="157" width="0.4" height="15.0" fill="rgb(242,171,41)" rx="2" ry="2" />
+<text  x="569.08" y="167.5" ></text>
+</g>
+<g >
+<title>L115: return Vector(self.x - other.x, self.y - other.y, self.z - other.z) (1 samples, 0.02%)</title><rect x="1165.7" y="237" width="0.2" height="15.0" fill="rgb(240,162,38)" rx="2" ry="2" />
+<text  x="1168.69" y="247.5" ></text>
+</g>
+<g >
+<title>dot (127 samples, 2.11%)</title><rect x="883.5" y="173" width="24.9" height="15.0" fill="rgb(251,212,50)" rx="2" ry="2" />
+<text  x="886.53" y="183.5" >dot</text>
+</g>
+<g >
+<title>L147: return None (5 samples, 0.08%)</title><rect x="463.3" y="205" width="1.0" height="15.0" fill="rgb(251,215,51)" rx="2" ry="2" />
+<text  x="466.33" y="215.5" ></text>
+</g>
+<g >
+<title>L27: self.z = initz (2 samples, 0.03%)</title><rect x="584.5" y="125" width="0.4" height="15.0" fill="rgb(213,39,9)" rx="2" ry="2" />
+<text  x="587.51" y="135.5" ></text>
+</g>
+<g >
+<title>reflectThrough (23 samples, 0.38%)</title><rect x="629.0" y="221" width="4.5" height="15.0" fill="rgb(215,49,11)" rx="2" ry="2" />
+<text  x="632.02" y="231.5" ></text>
+</g>
+<g >
+<title>L322: c = addColours(c, self.specularCoefficient, reflectedColour) (1 samples, 0.02%)</title><rect x="365.9" y="253" width="0.2" height="15.0" fill="rgb(211,28,6)" rx="2" ry="2" />
+<text  x="368.88" y="263.5" ></text>
+</g>
+<g >
+<title>L42: return Vector(self.x + other.x, self.y + other.y, self.z + other.z) (46 samples, 0.76%)</title><rect x="47.6" y="269" width="9.1" height="15.0" fill="rgb(245,186,44)" rx="2" ry="2" />
+<text  x="50.65" y="279.5" ></text>
+</g>
+<g >
+<title>L143: cp = self.centre - ray.point (8 samples, 0.13%)</title><rect x="536.1" y="173" width="1.5" height="15.0" fill="rgb(224,88,21)" rx="2" ry="2" />
+<text  x="539.08" y="183.5" ></text>
+</g>
+<g >
+<title>L115: return Vector(self.x - other.x, self.y - other.y, self.z - other.z) (47 samples, 0.78%)</title><rect x="388.4" y="237" width="9.2" height="15.0" fill="rgb(240,162,38)" rx="2" ry="2" />
+<text  x="391.43" y="247.5" ></text>
+</g>
+<g >
+<title>L145: discriminant = (self.radius * self.radius) - (cp.dot(cp) - v * v) (9 samples, 0.15%)</title><rect x="539.4" y="173" width="1.8" height="15.0" fill="rgb(210,23,5)" rx="2" ry="2" />
+<text  x="542.41" y="183.5" ></text>
+</g>
+<g >
+<title>L26: self.y = inity (7 samples, 0.12%)</title><rect x="85.5" y="221" width="1.4" height="15.0" fill="rgb(233,128,30)" rx="2" ry="2" />
+<text  x="88.49" y="231.5" ></text>
+</g>
+<g >
+<title>L178: self.point = point (1 samples, 0.02%)</title><rect x="528.0" y="205" width="0.2" height="15.0" fill="rgb(243,177,42)" rx="2" ry="2" />
+<text  x="531.04" y="215.5" ></text>
+</g>
+<g >
+<title>scale (3 samples, 0.05%)</title><rect x="414.9" y="237" width="0.6" height="15.0" fill="rgb(254,227,54)" rx="2" ry="2" />
+<text  x="417.90" y="247.5" ></text>
+</g>
+<g >
+<title>L49: return Vector(factor * self.x, factor * self.y, factor * self.z) (3 samples, 0.05%)</title><rect x="561.2" y="141" width="0.6" height="15.0" fill="rgb(253,224,53)" rx="2" ry="2" />
+<text  x="564.18" y="151.5" ></text>
+</g>
+<g >
+<title>L145: discriminant = (self.radius * self.radius) - (cp.dot(cp) - v * v) (32 samples, 0.53%)</title><rect x="691.6" y="173" width="6.2" height="15.0" fill="rgb(210,23,5)" rx="2" ry="2" />
+<text  x="694.57" y="183.5" ></text>
+</g>
+<g >
+<title>magnitude (1 samples, 0.02%)</title><rect x="582.0" y="93" width="0.2" height="15.0" fill="rgb(224,91,21)" rx="2" ry="2" />
+<text  x="584.96" y="103.5" ></text>
+</g>
+<g >
+<title>L178: self.point = point (3 samples, 0.05%)</title><rect x="593.1" y="141" width="0.6" height="15.0" fill="rgb(243,177,42)" rx="2" ry="2" />
+<text  x="596.14" y="151.5" ></text>
+</g>
+<g >
+<title>L36: return math.sqrt(self.dot(self)) (5 samples, 0.08%)</title><rect x="384.1" y="205" width="1.0" height="15.0" fill="rgb(247,195,46)" rx="2" ry="2" />
+<text  x="387.12" y="215.5" ></text>
+</g>
+<g >
+<title>plot (173 samples, 2.87%; 0.00%)</title><rect x="87.6" y="285" width="34.0" height="15.0" fill="rgb(255,255,255)" rx="2" ry="2" />
+<text  x="90.65" y="295.5" >plot</text>
+</g>
+<g >
+<title>L27: self.z = initz (4 samples, 0.07%)</title><rect x="86.9" y="221" width="0.7" height="15.0" fill="rgb(213,39,9)" rx="2" ry="2" />
+<text  x="89.86" y="231.5" ></text>
+</g>
+<g >
+<title>__init__ (15 samples, 0.25%)</title><rect x="84.7" y="237" width="2.9" height="15.0" fill="rgb(242,171,41)" rx="2" ry="2" />
+<text  x="87.71" y="247.5" ></text>
+</g>
+<g >
+<title>L318: c = (0, 0, 0) (2 samples, 0.03%)</title><rect x="361.2" y="253" width="0.4" height="15.0" fill="rgb(251,211,50)" rx="2" ry="2" />
+<text  x="364.18" y="263.5" ></text>
+</g>
+<g >
+<title>L316: b = self.baseColourAt(p) (12 samples, 0.20%)</title><rect x="358.8" y="253" width="2.4" height="15.0" fill="rgb(228,110,26)" rx="2" ry="2" />
+<text  x="361.82" y="263.5" ></text>
+</g>
+<g >
+<title>L217: if candidateT is not None and candidateT &gt; -EPSILON: (22 samples, 0.37%)</title><rect x="1158.8" y="253" width="4.3" height="15.0" fill="rgb(212,35,8)" rx="2" ry="2" />
+<text  x="1161.82" y="263.5" ></text>
+</g>
+<g >
+<title>L115: return Vector(self.x - other.x, self.y - other.y, self.z - other.z) (2 samples, 0.03%)</title><rect x="562.4" y="173" width="0.3" height="15.0" fill="rgb(240,162,38)" rx="2" ry="2" />
+<text  x="565.35" y="183.5" ></text>
+</g>
+<g >
+<title>L114: if other.isPoint(): (6 samples, 0.10%)</title><rect x="412.4" y="221" width="1.1" height="15.0" fill="rgb(212,36,8)" rx="2" ry="2" />
+<text  x="415.35" y="231.5" ></text>
+</g>
+<g >
+<title>L27: self.z = initz (3 samples, 0.05%)</title><rect x="728.4" y="173" width="0.6" height="15.0" fill="rgb(213,39,9)" rx="2" ry="2" />
+<text  x="731.43" y="183.5" ></text>
+</g>
+<g >
+<title>dot (7 samples, 0.12%)</title><rect x="385.1" y="205" width="1.4" height="15.0" fill="rgb(251,212,50)" rx="2" ry="2" />
+<text  x="388.10" y="215.5" ></text>
+</g>
+<g >
+<title>L36: return math.sqrt(self.dot(self)) (26 samples, 0.43%)</title><rect x="72.2" y="237" width="5.1" height="15.0" fill="rgb(247,195,46)" rx="2" ry="2" />
+<text  x="75.16" y="247.5" ></text>
+</g>
+<g >
+<title>L114: if other.isPoint(): (3 samples, 0.05%)</title><rect x="542.4" y="157" width="0.5" height="15.0" fill="rgb(212,36,8)" rx="2" ry="2" />
+<text  x="545.35" y="167.5" ></text>
+</g>
+<g >
+<title>L319: if self.specularCoefficient &gt; 0: (4 samples, 0.07%)</title><rect x="361.6" y="253" width="0.8" height="15.0" fill="rgb(231,123,29)" rx="2" ry="2" />
+<text  x="364.57" y="263.5" ></text>
+</g>
+<g >
+<title>L145: discriminant = (self.radius * self.radius) - (cp.dot(cp) - v * v) (5 samples, 0.08%)</title><rect x="569.2" y="141" width="1.0" height="15.0" fill="rgb(210,23,5)" rx="2" ry="2" />
+<text  x="572.22" y="151.5" ></text>
+</g>
+<g >
+<title>L316: b = self.baseColourAt(p) (2 samples, 0.03%)</title><rect x="522.7" y="221" width="0.4" height="15.0" fill="rgb(228,110,26)" rx="2" ry="2" />
+<text  x="525.75" y="231.5" ></text>
+</g>
+<g >
+<title>L263: colour = self.rayColour(ray) (36 samples, 0.60%)</title><rect x="29.4" y="285" width="7.1" height="15.0" fill="rgb(250,208,49)" rx="2" ry="2" />
+<text  x="32.41" y="295.5" ></text>
+</g>
+<g >
+<title>intersectionTime (4 samples, 0.07%)</title><rect x="583.1" y="125" width="0.8" height="15.0" fill="rgb(218,63,15)" rx="2" ry="2" />
+<text  x="586.14" y="135.5" ></text>
+</g>
+<g >
+<title>L172: return self.normal (4 samples, 0.07%)</title><rect x="1164.1" y="253" width="0.8" height="15.0" fill="rgb(207,9,2)" rx="2" ry="2" />
+<text  x="1167.12" y="263.5" ></text>
+</g>
+<g >
+<title>L167: return 1 / -v (3 samples, 0.05%)</title><rect x="698.4" y="173" width="0.6" height="15.0" fill="rgb(236,143,34)" rx="2" ry="2" />
+<text  x="701.43" y="183.5" ></text>
+</g>
+<g >
+<title>__init__ (5 samples, 0.08%)</title><rect x="672.4" y="141" width="0.9" height="15.0" fill="rgb(242,171,41)" rx="2" ry="2" />
+<text  x="675.35" y="151.5" ></text>
+</g>
+<g >
+<title>L324: if self.lambertCoefficient &gt; 0: (3 samples, 0.05%)</title><rect x="366.1" y="253" width="0.6" height="15.0" fill="rgb(232,128,30)" rx="2" ry="2" />
+<text  x="369.08" y="263.5" ></text>
+</g>
+<g >
+<title>addColours (3 samples, 0.05%)</title><rect x="562.7" y="189" width="0.6" height="15.0" fill="rgb(245,185,44)" rx="2" ry="2" />
+<text  x="565.75" y="199.5" ></text>
+</g>
+<g >
+<title>L49: return Vector(factor * self.x, factor * self.y, factor * self.z) (4 samples, 0.07%)</title><rect x="582.2" y="77" width="0.7" height="15.0" fill="rgb(253,224,53)" rx="2" ry="2" />
+<text  x="585.16" y="87.5" ></text>
+</g>
+<g >
+<title>L46: return Vector(self.x - other.x, self.y - other.y, self.z - other.z) (3 samples, 0.05%)</title><rect x="577.8" y="125" width="0.6" height="15.0" fill="rgb(230,119,28)" rx="2" ry="2" />
+<text  x="580.84" y="135.5" ></text>
+</g>
+<g >
+<title>L165: v = ray.vector.dot(self.normal) (15 samples, 0.25%)</title><rect x="197.3" y="237" width="2.9" height="15.0" fill="rgb(240,163,39)" rx="2" ry="2" />
+<text  x="200.25" y="247.5" ></text>
+</g>
+<g >
+<title>L77: return self (1 samples, 0.02%)</title><rect x="425.7" y="189" width="0.2" height="15.0" fill="rgb(230,119,28)" rx="2" ry="2" />
+<text  x="428.69" y="199.5" ></text>
+</g>
+<g >
+<title>__init__ (55 samples, 0.91%)</title><rect x="986.9" y="205" width="10.7" height="15.0" fill="rgb(242,171,41)" rx="2" ry="2" />
+<text  x="989.86" y="215.5" ></text>
+</g>
+<g >
+<title>L334: c = addColours(c, self.ambientCoefficient, b) (1 samples, 0.02%)</title><rect x="527.8" y="221" width="0.2" height="15.0" fill="rgb(221,74,17)" rx="2" ry="2" />
+<text  x="530.84" y="231.5" ></text>
+</g>
+<g >
+<title>colourAt (34 samples, 0.56%)</title><rect x="577.3" y="173" width="6.6" height="15.0" fill="rgb(230,118,28)" rx="2" ry="2" />
+<text  x="580.25" y="183.5" ></text>
+</g>
+<g >
+<title>isPoint (6 samples, 0.10%)</title><rect x="488.0" y="189" width="1.2" height="15.0" fill="rgb(220,70,16)" rx="2" ry="2" />
+<text  x="491.04" y="199.5" ></text>
+</g>
+<g >
+<title>L272: for (o, s) in self.objects] (1 samples, 0.02%)</title><rect x="567.3" y="157" width="0.2" height="15.0" fill="rgb(225,94,22)" rx="2" ry="2" />
+<text  x="570.25" y="167.5" ></text>
+</g>
+<g >
+<title>L26: self.y = inity (28 samples, 0.47%)</title><rect x="933.9" y="157" width="5.5" height="15.0" fill="rgb(233,128,30)" rx="2" ry="2" />
+<text  x="936.92" y="167.5" ></text>
+</g>
+<g >
+<title>dot (1 samples, 0.02%)</title><rect x="532.4" y="221" width="0.1" height="15.0" fill="rgb(251,212,50)" rx="2" ry="2" />
+<text  x="535.35" y="231.5" ></text>
+</g>
+<g >
+<title>normalAt (15 samples, 0.25%)</title><rect x="1163.5" y="269" width="3.0" height="15.0" fill="rgb(251,215,51)" rx="2" ry="2" />
+<text  x="1166.53" y="279.5" ></text>
+</g>
+<g >
+<title>dot (10 samples, 0.17%)</title><rect x="574.5" y="141" width="2.0" height="15.0" fill="rgb(251,212,50)" rx="2" ry="2" />
+<text  x="577.51" y="151.5" ></text>
+</g>
+<g >
+<title>L115: return Vector(self.x - other.x, self.y - other.y, self.z - other.z) (7 samples, 0.12%)</title><rect x="571.6" y="125" width="1.3" height="15.0" fill="rgb(240,162,38)" rx="2" ry="2" />
+<text  x="574.57" y="135.5" ></text>
+</g>
+<g >
+<title>L271: intersections = [(o, o.intersectionTime(ray), s) (9 samples, 0.15%)</title><rect x="349.0" y="269" width="1.8" height="15.0" fill="rgb(248,202,48)" rx="2" ry="2" />
+<text  x="352.02" y="279.5" ></text>
+</g>
+<g >
+<title>L144: v = cp.dot(ray.vector) (53 samples, 0.88%)</title><rect x="162.4" y="237" width="10.3" height="15.0" fill="rgb(238,153,36)" rx="2" ry="2" />
+<text  x="165.35" y="247.5" ></text>
+</g>
+<g >
+<title>mustBeVector (3 samples, 0.05%)</title><rect x="419.4" y="237" width="0.6" height="15.0" fill="rgb(232,125,29)" rx="2" ry="2" />
+<text  x="422.41" y="247.5" ></text>
+</g>
+<g >
+<title>isPoint (3 samples, 0.05%)</title><rect x="573.9" y="125" width="0.6" height="15.0" fill="rgb(220,70,16)" rx="2" ry="2" />
+<text  x="576.92" y="135.5" ></text>
+</g>
+<g >
+<title>L147: return None (3 samples, 0.05%)</title><rect x="196.5" y="237" width="0.6" height="15.0" fill="rgb(251,215,51)" rx="2" ry="2" />
+<text  x="199.47" y="247.5" ></text>
+</g>
+<g >
+<title>L62: return self.scale(1.0 / self.magnitude()) (10 samples, 0.17%)</title><rect x="594.5" y="125" width="2.0" height="15.0" fill="rgb(238,153,36)" rx="2" ry="2" />
+<text  x="597.51" y="135.5" ></text>
+</g>
+<g >
+<title>L53: return (self.x * other.x) + (self.y * other.y) + (self.z * other.z) (6 samples, 0.10%)</title><rect x="424.5" y="205" width="1.2" height="15.0" fill="rgb(205,1,0)" rx="2" ry="2" />
+<text  x="427.51" y="215.5" ></text>
+</g>
+<g >
+<title>L285: t = o.intersectionTime(Ray(p, l - p)) (66 samples, 1.10%)</title><rect x="634.7" y="189" width="12.9" height="15.0" fill="rgb(224,87,21)" rx="2" ry="2" />
+<text  x="637.71" y="199.5" ></text>
+</g>
+<g >
+<title>L62: return self.scale(1.0 / self.magnitude()) (5 samples, 0.08%)</title><rect x="581.0" y="93" width="1.0" height="15.0" fill="rgb(238,153,36)" rx="2" ry="2" />
+<text  x="583.98" y="103.5" ></text>
+</g>
+<g >
+<title>L320: reflectedRay = Ray(p, ray.vector.reflectThrough(normal)) (1 samples, 0.02%)</title><rect x="556.3" y="189" width="0.2" height="15.0" fill="rgb(212,36,8)" rx="2" ry="2" />
+<text  x="559.27" y="199.5" ></text>
+</g>
+<g >
+<title>L27: self.z = initz (5 samples, 0.08%)</title><rect x="398.2" y="221" width="1.0" height="15.0" fill="rgb(213,39,9)" rx="2" ry="2" />
+<text  x="401.24" y="231.5" ></text>
+</g>
+<g >
+<title>L25: self.x = initx (4 samples, 0.07%)</title><rect x="578.8" y="109" width="0.8" height="15.0" fill="rgb(252,218,52)" rx="2" ry="2" />
+<text  x="581.82" y="119.5" ></text>
+</g>
+<g >
+<title>L149: return v - math.sqrt(discriminant) (1 samples, 0.02%)</title><rect x="197.1" y="237" width="0.2" height="15.0" fill="rgb(224,89,21)" rx="2" ry="2" />
+<text  x="200.06" y="247.5" ></text>
+</g>
+<g >
+<title>intersectionTime (81 samples, 1.35%)</title><rect x="611.4" y="157" width="15.9" height="15.0" fill="rgb(218,63,15)" rx="2" ry="2" />
+<text  x="614.37" y="167.5" ></text>
+</g>
+<g >
+<title>__init__ (99 samples, 1.65%)</title><rect x="249.4" y="221" width="19.4" height="15.0" fill="rgb(242,171,41)" rx="2" ry="2" />
+<text  x="252.41" y="231.5" ></text>
+</g>
+<g >
+<title>__init__ (86 samples, 1.43%)</title><rect x="927.3" y="173" width="16.8" height="15.0" fill="rgb(242,171,41)" rx="2" ry="2" />
+<text  x="930.25" y="183.5" ></text>
+</g>
+<g >
+<title>_lightIsVisible (452 samples, 7.51%)</title><rect x="633.7" y="205" width="88.7" height="15.0" fill="rgb(234,136,32)" rx="2" ry="2" />
+<text  x="636.73" y="215.5" >_lightIsVi..</text>
+</g>
+<g >
+<title>L279: return s.colourAt(self, ray, p, o.normalAt(p)) (6 samples, 0.10%)</title><rect x="555.1" y="205" width="1.2" height="15.0" fill="rgb(235,139,33)" rx="2" ry="2" />
+<text  x="558.10" y="215.5" ></text>
+</g>
+<g >
+<title>L26: self.y = inity (4 samples, 0.07%)</title><rect x="430.0" y="205" width="0.8" height="15.0" fill="rgb(233,128,30)" rx="2" ry="2" />
+<text  x="433.00" y="215.5" ></text>
+</g>
+<g >
+<title>dot (1 samples, 0.02%)</title><rect x="534.3" y="189" width="0.2" height="15.0" fill="rgb(251,212,50)" rx="2" ry="2" />
+<text  x="537.31" y="199.5" ></text>
+</g>
+<g >
+<title>L123: return True (5 samples, 0.08%)</title><rect x="997.6" y="189" width="1.0" height="15.0" fill="rgb(237,147,35)" rx="2" ry="2" />
+<text  x="1000.65" y="199.5" ></text>
+</g>
+<g >
+<title>normalized (3 samples, 0.05%)</title><rect x="1165.9" y="253" width="0.6" height="15.0" fill="rgb(206,5,1)" rx="2" ry="2" />
+<text  x="1168.88" y="263.5" ></text>
+</g>
+<g >
+<title>L25: self.x = initx (30 samples, 0.50%)</title><rect x="986.9" y="189" width="5.8" height="15.0" fill="rgb(252,218,52)" rx="2" ry="2" />
+<text  x="989.86" y="199.5" ></text>
+</g>
+<g >
+<title>L49: return Vector(factor * self.x, factor * self.y, factor * self.z) (2 samples, 0.03%)</title><rect x="584.9" y="157" width="0.4" height="15.0" fill="rgb(253,224,53)" rx="2" ry="2" />
+<text  x="587.90" y="167.5" ></text>
+</g>
+<g >
+<title>L143: cp = self.centre - ray.point (80 samples, 1.33%)</title><rect x="146.7" y="237" width="15.7" height="15.0" fill="rgb(224,88,21)" rx="2" ry="2" />
+<text  x="149.67" y="247.5" ></text>
+</g>
+<g >
+<title>__sub__ (52 samples, 0.86%)</title><rect x="699.0" y="173" width="10.2" height="15.0" fill="rgb(227,101,24)" rx="2" ry="2" />
+<text  x="702.02" y="183.5" ></text>
+</g>
+<g >
+<title>L185: return self.point + self.vector.scale(t) (3 samples, 0.05%)</title><rect x="729.0" y="221" width="0.6" height="15.0" fill="rgb(218,63,15)" rx="2" ry="2" />
+<text  x="732.02" y="231.5" ></text>
+</g>
+<g >
+<title>L178: self.point = point (51 samples, 0.85%)</title><rect x="813.1" y="205" width="10.0" height="15.0" fill="rgb(243,177,42)" rx="2" ry="2" />
+<text  x="816.14" y="215.5" ></text>
+</g>
+<g >
+<title>L165: v = ray.vector.dot(self.normal) (1 samples, 0.02%)</title><rect x="570.2" y="141" width="0.2" height="15.0" fill="rgb(240,163,39)" rx="2" ry="2" />
+<text  x="573.20" y="151.5" ></text>
+</g>
+<g >
+<title>__sub__ (37 samples, 0.61%)</title><rect x="616.1" y="141" width="7.2" height="15.0" fill="rgb(227,101,24)" rx="2" ry="2" />
+<text  x="619.08" y="151.5" ></text>
+</g>
+<g >
+<title>L145: discriminant = (self.radius * self.radius) - (cp.dot(cp) - v * v) (87 samples, 1.45%)</title><rect x="1025.5" y="205" width="17.0" height="15.0" fill="rgb(210,23,5)" rx="2" ry="2" />
+<text  x="1028.49" y="215.5" ></text>
+</g>
+<g >
+<title>L27: self.z = initz (2 samples, 0.03%)</title><rect x="545.5" y="141" width="0.4" height="15.0" fill="rgb(213,39,9)" rx="2" ry="2" />
+<text  x="548.49" y="151.5" ></text>
+</g>
+<g >
+<title>L348: v.scale(1.0 / self.checkSize) (5 samples, 0.08%)</title><rect x="408.0" y="237" width="1.0" height="15.0" fill="rgb(232,128,30)" rx="2" ry="2" />
+<text  x="411.04" y="247.5" ></text>
+</g>
+<g >
+<title>L322: c = addColours(c, self.specularCoefficient, reflectedColour) (2 samples, 0.03%)</title><rect x="556.5" y="189" width="0.4" height="15.0" fill="rgb(211,28,6)" rx="2" ry="2" />
+<text  x="559.47" y="199.5" ></text>
+</g>
+<g >
+<title>L25: self.x = initx (7 samples, 0.12%)</title><rect x="484.1" y="173" width="1.4" height="15.0" fill="rgb(252,218,52)" rx="2" ry="2" />
+<text  x="487.12" y="183.5" ></text>
+</g>
+<g >
+<title>scale (4 samples, 0.07%)</title><rect x="584.9" y="173" width="0.8" height="15.0" fill="rgb(254,227,54)" rx="2" ry="2" />
+<text  x="587.90" y="183.5" ></text>
+</g>
+<g >
+<title>__init__ (1 samples, 0.02%)</title><rect x="414.7" y="221" width="0.2" height="15.0" fill="rgb(242,171,41)" rx="2" ry="2" />
+<text  x="417.71" y="231.5" ></text>
+</g>
+<g >
+<title>__add__ (32 samples, 0.53%)</title><rect x="1167.6" y="253" width="6.3" height="15.0" fill="rgb(240,161,38)" rx="2" ry="2" />
+<text  x="1170.65" y="263.5" ></text>
+</g>
+<g >
+<title>addColours (1 samples, 0.02%)</title><rect x="577.6" y="157" width="0.2" height="15.0" fill="rgb(245,185,44)" rx="2" ry="2" />
+<text  x="580.65" y="167.5" ></text>
+</g>
+<g >
+<title>reflectThrough (61 samples, 1.01%)</title><rect x="730.4" y="253" width="12.0" height="15.0" fill="rgb(215,49,11)" rx="2" ry="2" />
+<text  x="733.39" y="263.5" ></text>
+</g>
+<g >
+<title>L333: if self.ambientCoefficient &gt; 0: (3 samples, 0.05%)</title><rect x="527.3" y="221" width="0.5" height="15.0" fill="rgb(228,106,25)" rx="2" ry="2" />
+<text  x="530.25" y="231.5" ></text>
+</g>
+<g >
+<title>L25: self.x = initx (9 samples, 0.15%)</title><rect x="56.7" y="253" width="1.7" height="15.0" fill="rgb(252,218,52)" rx="2" ry="2" />
+<text  x="59.67" y="263.5" ></text>
+</g>
+<g >
+<title>L26: self.y = inity (27 samples, 0.45%)</title><rect x="1085.3" y="173" width="5.3" height="15.0" fill="rgb(233,128,30)" rx="2" ry="2" />
+<text  x="1088.29" y="183.5" ></text>
+</g>
+<g >
+<title>L26: self.y = inity (5 samples, 0.08%)</title><rect x="544.5" y="141" width="1.0" height="15.0" fill="rgb(233,128,30)" rx="2" ry="2" />
+<text  x="547.51" y="151.5" ></text>
+</g>
+<g >
+<title>L83: d = normal.scale(self.dot(normal)) (4 samples, 0.07%)</title><rect x="730.4" y="237" width="0.8" height="15.0" fill="rgb(247,194,46)" rx="2" ry="2" />
+<text  x="733.39" y="247.5" ></text>
+</g>
+<g >
+<title>L36: return math.sqrt(self.dot(self)) (7 samples, 0.12%)</title><rect x="422.9" y="221" width="1.4" height="15.0" fill="rgb(247,195,46)" rx="2" ry="2" />
+<text  x="425.94" y="231.5" ></text>
+</g>
+<g >
+<title>L260: xcomp = vpRight.scale(x * pixelWidth - halfWidth) (23 samples, 0.38%)</title><rect x="14.7" y="285" width="4.5" height="15.0" fill="rgb(221,75,18)" rx="2" ry="2" />
+<text  x="17.71" y="295.5" ></text>
+</g>
+<g >
+<title>L178: self.point = point (1 samples, 0.02%)</title><rect x="580.8" y="109" width="0.2" height="15.0" fill="rgb(243,177,42)" rx="2" ry="2" />
+<text  x="583.78" y="119.5" ></text>
+</g>
+<g >
+<title>L52: other.mustBeVector() (96 samples, 1.60%)</title><rect x="271.8" y="221" width="18.8" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
+<text  x="274.76" y="231.5" ></text>
+</g>
+<g >
+<title>__init__ (34 samples, 0.56%)</title><rect x="56.7" y="269" width="6.6" height="15.0" fill="rgb(242,171,41)" rx="2" ry="2" />
+<text  x="59.67" y="279.5" ></text>
+</g>
+<g >
+<title>L27: self.z = initz (1 samples, 0.02%)</title><rect x="673.1" y="125" width="0.2" height="15.0" fill="rgb(213,39,9)" rx="2" ry="2" />
+<text  x="676.14" y="135.5" ></text>
+</g>
+<g >
+<title>L27: self.z = initz (24 samples, 0.40%)</title><rect x="939.4" y="157" width="4.7" height="15.0" fill="rgb(213,39,9)" rx="2" ry="2" />
+<text  x="942.41" y="167.5" ></text>
+</g>
+<g >
+<title>__init__ (21 samples, 0.35%)</title><rect x="429.2" y="221" width="4.1" height="15.0" fill="rgb(242,171,41)" rx="2" ry="2" />
+<text  x="432.22" y="231.5" ></text>
+</g>
+<g >
+<title>L143: cp = self.centre - ray.point (29 samples, 0.48%)</title><rect x="442.7" y="205" width="5.7" height="15.0" fill="rgb(224,88,21)" rx="2" ry="2" />
+<text  x="445.75" y="215.5" ></text>
+</g>
+<g >
+<title>dot (2 samples, 0.03%)</title><rect x="1165.9" y="221" width="0.4" height="15.0" fill="rgb(251,212,50)" rx="2" ry="2" />
+<text  x="1168.88" y="231.5" ></text>
+</g>
+<g >
+<title>rayColour (5,382 samples, 89.43%)</title><rect x="121.6" y="285" width="1055.3" height="15.0" fill="rgb(212,32,7)" rx="2" ry="2" />
+<text  x="124.57" y="295.5" >rayColour</text>
+</g>
+<g >
+<title>L25: self.x = initx (4 samples, 0.07%)</title><rect x="429.2" y="205" width="0.8" height="15.0" fill="rgb(252,218,52)" rx="2" ry="2" />
+<text  x="432.22" y="215.5" ></text>
+</g>
+<g >
+<title>all (6,018 samples, 100%)</title><rect x="10.0" y="333" width="1180.0" height="15.0" fill="rgb(213,39,9)" rx="2" ry="2" />
+<text  x="13.00" y="343.5" ></text>
+</g>
+<g >
+<title>L25: self.x = initx (6 samples, 0.10%)</title><rect x="387.1" y="189" width="1.1" height="15.0" fill="rgb(252,218,52)" rx="2" ry="2" />
+<text  x="390.06" y="199.5" ></text>
+</g>
+<g >
+<title>L114: if other.isPoint(): (8 samples, 0.13%)</title><rect x="616.1" y="125" width="1.5" height="15.0" fill="rgb(212,36,8)" rx="2" ry="2" />
+<text  x="619.08" y="135.5" ></text>
+</g>
+<g >
+<title>scale (6 samples, 0.10%)</title><rect x="578.4" y="141" width="1.2" height="15.0" fill="rgb(254,227,54)" rx="2" ry="2" />
+<text  x="581.43" y="151.5" ></text>
+</g>
+<g >
+<title>__init__ (4 samples, 0.07%)</title><rect x="578.8" y="125" width="0.8" height="15.0" fill="rgb(242,171,41)" rx="2" ry="2" />
+<text  x="581.82" y="135.5" ></text>
+</g>
+<g >
+<title>mustBeVector (1 samples, 0.02%)</title><rect x="80.6" y="221" width="0.2" height="15.0" fill="rgb(232,125,29)" rx="2" ry="2" />
+<text  x="83.59" y="231.5" ></text>
+</g>
+<g >
+<title>normalized (32 samples, 0.53%)</title><rect x="382.2" y="237" width="6.2" height="15.0" fill="rgb(206,5,1)" rx="2" ry="2" />
+<text  x="385.16" y="247.5" ></text>
+</g>
+<g >
+<title>intersectionTime (178 samples, 2.96%)</title><rect x="687.5" y="189" width="34.9" height="15.0" fill="rgb(218,63,15)" rx="2" ry="2" />
+<text  x="690.45" y="199.5" >in..</text>
+</g>
+<g >
+<title>L262: ray = Ray(eye.point, eye.vector + xcomp + ycomp) (42 samples, 0.70%)</title><rect x="21.2" y="285" width="8.2" height="15.0" fill="rgb(231,120,28)" rx="2" ry="2" />
+<text  x="24.18" y="295.5" ></text>
+</g>
+<g >
+<title>L111: return Point(self.x + other.x, self.y + other.y, self.z + other.z) (3 samples, 0.05%)</title><rect x="729.6" y="205" width="0.6" height="15.0" fill="rgb(233,129,30)" rx="2" ry="2" />
+<text  x="732.61" y="215.5" ></text>
+</g>
+<g >
+<title>L36: return math.sqrt(self.dot(self)) (4 samples, 0.07%)</title><rect x="533.5" y="189" width="0.8" height="15.0" fill="rgb(247,195,46)" rx="2" ry="2" />
+<text  x="536.53" y="199.5" ></text>
+</g>
+<g >
+<title>magnitude (1 samples, 0.02%)</title><rect x="627.8" y="173" width="0.2" height="15.0" fill="rgb(224,91,21)" rx="2" ry="2" />
+<text  x="630.84" y="183.5" ></text>
+</g>
+<g >
+<title>L271: intersections = [(o, o.intersectionTime(ray), s) (3 samples, 0.05%)</title><rect x="576.7" y="173" width="0.6" height="15.0" fill="rgb(248,202,48)" rx="2" ry="2" />
+<text  x="579.67" y="183.5" ></text>
+</g>
+<g >
+<title>__init__ (9 samples, 0.15%)</title><rect x="560.6" y="189" width="1.8" height="15.0" fill="rgb(242,171,41)" rx="2" ry="2" />
+<text  x="563.59" y="199.5" ></text>
+</g>
+<g >
+<title>__init__ (2 samples, 0.03%)</title><rect x="742.0" y="221" width="0.4" height="15.0" fill="rgb(242,171,41)" rx="2" ry="2" />
+<text  x="744.96" y="231.5" ></text>
+</g>
+<g >
+<title>L196: self.bytes[i * 3 + 2] = (11 samples, 0.18%; -4.05%)</title><rect x="11.2" y="285" width="2.1" height="15.0" fill="rgb(0,0,255)" rx="2" ry="2" />
+<text  x="14.18" y="295.5" ></text>
+</g>
+<g >
+<title>__init__ (3 samples, 0.05%)</title><rect x="528.0" y="221" width="0.6" height="15.0" fill="rgb(242,171,41)" rx="2" ry="2" />
+<text  x="531.04" y="231.5" ></text>
+</g>
+<g >
+<title>L25: self.x = initx (1 samples, 0.02%)</title><rect x="621.8" y="109" width="0.2" height="15.0" fill="rgb(252,218,52)" rx="2" ry="2" />
+<text  x="624.76" y="119.5" ></text>
+</g>
+<g >
+<title>L299: return (a[0] + scale * b[0], (4 samples, 0.07%)</title><rect x="529.6" y="205" width="0.8" height="15.0" fill="rgb(249,203,48)" rx="2" ry="2" />
+<text  x="532.61" y="215.5" ></text>
+</g>
+<g >
+<title>L53: return (self.x * other.x) + (self.y * other.y) + (self.z * other.z) (183 samples, 3.04%)</title><rect x="1115.3" y="189" width="35.9" height="15.0" fill="rgb(205,1,0)" rx="2" ry="2" />
+<text  x="1118.29" y="199.5" >L53..</text>
+</g>
+<g >
+<title>L26: self.y = inity (5 samples, 0.08%)</title><rect x="684.9" y="157" width="1.0" height="15.0" fill="rgb(233,128,30)" rx="2" ry="2" />
+<text  x="687.90" y="167.5" ></text>
+</g>
+<g >
+<title>L271: intersections = [(o, o.intersectionTime(ray), s) (39 samples, 0.65%)</title><rect x="433.3" y="221" width="7.7" height="15.0" fill="rgb(248,202,48)" rx="2" ry="2" />
+<text  x="436.33" y="231.5" ></text>
+</g>
+<g >
+<title>_lightIsVisible (212 samples, 3.52%)</title><rect x="585.7" y="173" width="41.6" height="15.0" fill="rgb(234,136,32)" rx="2" ry="2" />
+<text  x="588.69" y="183.5" >_li..</text>
+</g>
+<g >
+<title>L25: self.x = initx (15 samples, 0.25%)</title><rect x="706.1" y="141" width="2.9" height="15.0" fill="rgb(252,218,52)" rx="2" ry="2" />
+<text  x="709.08" y="151.5" ></text>
+</g>
+<g >
+<title>L26: self.y = inity (4 samples, 0.07%)</title><rect x="672.4" y="125" width="0.7" height="15.0" fill="rgb(233,128,30)" rx="2" ry="2" />
+<text  x="675.35" y="135.5" ></text>
+</g>
+<g >
+<title>L273: i = firstIntersection(intersections) (2 samples, 0.03%)</title><rect x="520.6" y="237" width="0.4" height="15.0" fill="rgb(237,151,36)" rx="2" ry="2" />
+<text  x="523.59" y="247.5" ></text>
+</g>
+<g >
+<title>L334: c = addColours(c, self.ambientCoefficient, b) (1 samples, 0.02%)</title><rect x="380.2" y="253" width="0.2" height="15.0" fill="rgb(221,74,17)" rx="2" ry="2" />
+<text  x="383.20" y="263.5" ></text>
+</g>
+<g >
+<title>L331: c = addColours(c, self.lambertCoefficient * lambertAmount, b) (6 samples, 0.10%)</title><rect x="377.1" y="253" width="1.1" height="15.0" fill="rgb(254,225,54)" rx="2" ry="2" />
+<text  x="380.06" y="263.5" ></text>
+</g>
+<g >
+<title>normalized (105 samples, 1.74%)</title><rect x="652.7" y="173" width="20.6" height="15.0" fill="rgb(206,5,1)" rx="2" ry="2" />
+<text  x="655.75" y="183.5" ></text>
+</g>
+<g >
+<title>__sub__ (5 samples, 0.08%)</title><rect x="630.4" y="205" width="1.0" height="15.0" fill="rgb(227,101,24)" rx="2" ry="2" />
+<text  x="633.39" y="215.5" ></text>
+</g>
+<g >
+<title>L152: return (p - self.centre).normalized() (1 samples, 0.02%)</title><rect x="726.9" y="221" width="0.2" height="15.0" fill="rgb(243,175,41)" rx="2" ry="2" />
+<text  x="729.86" y="231.5" ></text>
+</g>
+<g >
+<title>dot (4 samples, 0.07%)</title><rect x="565.3" y="157" width="0.8" height="15.0" fill="rgb(251,212,50)" rx="2" ry="2" />
+<text  x="568.29" y="167.5" ></text>
+</g>
+<g >
+<title>L49: return Vector(factor * self.x, factor * self.y, factor * self.z) (15 samples, 0.25%)</title><rect x="669.4" y="141" width="3.0" height="15.0" fill="rgb(253,224,53)" rx="2" ry="2" />
+<text  x="672.41" y="151.5" ></text>
+</g>
+<g >
+<title>L284: for (o, s) in self.objects: (5 samples, 0.08%)</title><rect x="633.7" y="189" width="1.0" height="15.0" fill="rgb(232,125,29)" rx="2" ry="2" />
+<text  x="636.73" y="199.5" ></text>
+</g>
+<g >
+<title>L36: return math.sqrt(self.dot(self)) (145 samples, 2.41%)</title><rect x="855.1" y="173" width="28.4" height="15.0" fill="rgb(247,195,46)" rx="2" ry="2" />
+<text  x="858.10" y="183.5" >L3..</text>
+</g>
+<g >
+<title>__init__ (1 samples, 0.02%)</title><rect x="1166.3" y="221" width="0.2" height="15.0" fill="rgb(242,171,41)" rx="2" ry="2" />
+<text  x="1169.27" y="231.5" ></text>
+</g>
+<g >
+<title>L270: self.recursionDepth = self.recursionDepth + (7 samples, 0.12%; +0.10%)</title><rect x="347.6" y="269" width="1.4" height="15.0" fill="rgb(255,204,204)" rx="2" ry="2" />
+<text  x="350.65" y="279.5" ></text>
+</g>
+<g >
+<title>L62: return self.scale(1.0 / self.magnitude()) (15 samples, 0.25%)</title><rect x="420.0" y="237" width="2.9" height="15.0" fill="rgb(238,153,36)" rx="2" ry="2" />
+<text  x="423.00" y="247.5" ></text>
+</g>
+<g >
+<title>L52: other.mustBeVector() (25 samples, 0.42%)</title><rect x="883.5" y="157" width="4.9" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
+<text  x="886.53" y="167.5" ></text>
+</g>
+<g >
+<title>normalized (1 samples, 0.02%)</title><rect x="627.8" y="189" width="0.2" height="15.0" fill="rgb(206,5,1)" rx="2" ry="2" />
+<text  x="630.84" y="199.5" ></text>
+</g>
+<g >
+<title>__init__ (8 samples, 0.13%)</title><rect x="397.6" y="237" width="1.6" height="15.0" fill="rgb(242,171,41)" rx="2" ry="2" />
+<text  x="400.65" y="247.5" ></text>
+</g>
+<g >
+<title>L53: return (self.x * other.x) + (self.y * other.y) + (self.z * other.z) (11 samples, 0.18%)</title><rect x="417.3" y="237" width="2.1" height="15.0" fill="rgb(205,1,0)" rx="2" ry="2" />
+<text  x="420.25" y="247.5" ></text>
+</g>
+<g >
+<title>L123: return True (3 samples, 0.05%)</title><rect x="573.9" y="109" width="0.6" height="15.0" fill="rgb(237,147,35)" rx="2" ry="2" />
+<text  x="576.92" y="119.5" ></text>
+</g>
+<g >
+<title>L115: return Vector(self.x - other.x, self.y - other.y, self.z - other.z) (21 samples, 0.35%)</title><rect x="617.6" y="125" width="4.2" height="15.0" fill="rgb(240,162,38)" rx="2" ry="2" />
+<text  x="620.65" y="135.5" ></text>
+</g>
+<g >
+<title>L123: return True (3 samples, 0.05%)</title><rect x="686.9" y="157" width="0.6" height="15.0" fill="rgb(237,147,35)" rx="2" ry="2" />
+<text  x="689.86" y="167.5" ></text>
+</g>
+<g >
+<title>dot (296 samples, 4.92%)</title><rect x="1095.7" y="205" width="58.0" height="15.0" fill="rgb(251,212,50)" rx="2" ry="2" />
+<text  x="1098.69" y="215.5" >dot</text>
+</g>
+<g >
+<title>L39: if other.isPoint(): (22 samples, 0.37%)</title><rect x="43.3" y="269" width="4.3" height="15.0" fill="rgb(234,134,32)" rx="2" ry="2" />
+<text  x="46.33" y="279.5" ></text>
+</g>
+<g >
+<title>addColours (28 samples, 0.47%)</title><rect x="399.2" y="253" width="5.5" height="15.0" fill="rgb(245,185,44)" rx="2" ry="2" />
+<text  x="402.22" y="263.5" ></text>
+</g>
+<g >
+<title>L77: return self (3 samples, 0.05%)</title><rect x="565.5" y="125" width="0.6" height="15.0" fill="rgb(230,119,28)" rx="2" ry="2" />
+<text  x="568.49" y="135.5" ></text>
+</g>
+<g >
+<title>L167: return 1 / -v (3 samples, 0.05%)</title><rect x="615.5" y="141" width="0.6" height="15.0" fill="rgb(236,143,34)" rx="2" ry="2" />
+<text  x="618.49" y="151.5" ></text>
+</g>
+<g >
+<title>L77: return self (1 samples, 0.02%)</title><rect x="669.2" y="109" width="0.2" height="15.0" fill="rgb(230,119,28)" rx="2" ry="2" />
+<text  x="672.22" y="119.5" ></text>
+</g>
+<g >
+<title>L62: return self.scale(1.0 / self.magnitude()) (1 samples, 0.02%)</title><rect x="565.1" y="173" width="0.2" height="15.0" fill="rgb(238,153,36)" rx="2" ry="2" />
+<text  x="568.10" y="183.5" ></text>
+</g>
+<g >
+<title>L25: self.x = initx (26 samples, 0.43%)</title><rect x="1080.2" y="173" width="5.1" height="15.0" fill="rgb(252,218,52)" rx="2" ry="2" />
+<text  x="1083.20" y="183.5" ></text>
+</g>
+<g >
+<title>L27: self.z = initz (3 samples, 0.05%)</title><rect x="561.8" y="125" width="0.6" height="15.0" fill="rgb(213,39,9)" rx="2" ry="2" />
+<text  x="564.76" y="135.5" ></text>
+</g>
+<g >
+<title>L77: return self (1 samples, 0.02%)</title><rect x="80.6" y="205" width="0.2" height="15.0" fill="rgb(230,119,28)" rx="2" ry="2" />
+<text  x="83.59" y="215.5" ></text>
+</g>
+<g >
+<title>dot (67 samples, 1.11%)</title><rect x="709.2" y="173" width="13.2" height="15.0" fill="rgb(251,212,50)" rx="2" ry="2" />
+<text  x="712.22" y="183.5" ></text>
+</g>
+<g >
+<title>scale (15 samples, 0.25%)</title><rect x="1173.9" y="253" width="3.0" height="15.0" fill="rgb(254,227,54)" rx="2" ry="2" />
+<text  x="1176.92" y="263.5" ></text>
+</g>
+<g >
+<title>__init__ (44 samples, 0.73%)</title><rect x="1181.4" y="269" width="8.6" height="15.0" fill="rgb(242,171,41)" rx="2" ry="2" />
+<text  x="1184.37" y="279.5" ></text>
+</g>
+<g >
+<title>L115: return Vector(self.x - other.x, self.y - other.y, self.z - other.z) (139 samples, 2.31%)</title><rect x="1052.9" y="189" width="27.3" height="15.0" fill="rgb(240,162,38)" rx="2" ry="2" />
+<text  x="1055.94" y="199.5" >L..</text>
+</g>
+<g >
+<title>L52: other.mustBeVector() (100 samples, 1.66%)</title><rect x="1095.7" y="189" width="19.6" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
+<text  x="1098.69" y="199.5" ></text>
+</g>
+<g >
+<title>L52: other.mustBeVector() (13 samples, 0.22%)</title><rect x="545.9" y="157" width="2.5" height="15.0" fill="rgb(247,193,46)" rx="2" ry="2" />
+<text  x="548.88" y="167.5" ></text>
+</g>
+<g >
+<title>L101: self.z = initz (5 samples, 0.08%)</title><rect x="1171.8" y="221" width="0.9" height="15.0" fill="rgb(248,201,48)" rx="2" ry="2" />
+<text  x="1174.76" y="231.5" ></text>
+</g>
+<g >
+<title>L99: self.x = initx (5 samples, 0.08%)</title><rect x="1172.7" y="221" width="1.0" height="15.0" fill="rgb(231,121,28)" rx="2" ry="2" />
+<text  x="1175.75" y="231.5" ></text>
+</g>
+<g >
+<title>L349: if ((int(abs(v.x) + 0.5) (5 samples, 0.08%)</title><rect x="409.0" y="237" width="1.0" height="15.0" fill="rgb(234,134,32)" rx="2" ry="2" />
+<text  x="412.02" y="247.5" ></text>
+</g>
+<g >
+<title>L83: d = normal.scale(self.dot(normal)) (7 samples, 0.12%)</title><rect x="629.0" y="205" width="1.4" height="15.0" fill="rgb(247,194,46)" rx="2" ry="2" />
+<text  x="632.02" y="215.5" ></text>
+</g>
+<g >
+<title>L27: self.z = initz (7 samples, 0.12%)</title><rect x="486.7" y="173" width="1.3" height="15.0" fill="rgb(213,39,9)" rx="2" ry="2" />
+<text  x="489.67" y="183.5" ></text>
+</g>
+<g >
+<title>L166: if v: (8 samples, 0.13%)</title><rect x="200.2" y="237" width="1.6" height="15.0" fill="rgb(246,189,45)" rx="2" ry="2" />
+<text  x="203.20" y="247.5" ></text>
+</g>
+<g >
+<title>L77: return self (3 samples, 0.05%)</title><rect x="419.4" y="221" width="0.6" height="15.0" fill="rgb(230,119,28)" rx="2" ry="2" />
+<text  x="422.41" y="231.5" ></text>
+</g>
+<g >
+<title>L53: return (self.x * other.x) + (self.y * other.y) + (self.z * other.z) (81 samples, 1.35%)</title><rect x="888.4" y="157" width="15.9" height="15.0" fill="rgb(205,1,0)" rx="2" ry="2" />
+<text  x="891.43" y="167.5" ></text>
+</g>
+<g >
+<title>L27: self.z = initz (3 samples, 0.05%)</title><rect x="622.7" y="109" width="0.6" height="15.0" fill="rgb(213,39,9)" rx="2" ry="2" />
+<text  x="625.75" y="119.5" ></text>
+</g>
+<g >
+<title>L202: self.bytes[i] = max(0, min(255, int(r * 255))) (51 samples, 0.85%)</title><rect x="93.3" y="269" width="10.0" height="15.0" fill="rgb(216,54,12)" rx="2" ry="2" />
+<text  x="96.33" y="279.5" ></text>
+</g>
+<g >
+<title>L179: self.vector = vector.normalized() (4 samples, 0.07%)</title><rect x="593.7" y="141" width="0.8" height="15.0" fill="rgb(252,219,52)" rx="2" ry="2" />
+<text  x="596.73" y="151.5" ></text>
+</g>
+<g >
+<title>L115: return Vector(self.x - other.x, self.y - other.y, self.z - other.z) (1 samples, 0.02%)</title><rect x="528.8" y="205" width="0.2" height="15.0" fill="rgb(240,162,38)" rx="2" ry="2" />
+<text  x="531.82" y="215.5" ></text>
+</g>
+<g >
+<title>L36: return math.sqrt(self.dot(self)) (7 samples, 0.12%)</title><rect x="596.5" y="109" width="1.3" height="15.0" fill="rgb(247,195,46)" rx="2" ry="2" />
+<text  x="599.47" y="119.5" ></text>
+</g>
+</g>
+</svg>

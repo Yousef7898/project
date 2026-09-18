@@ -1,0 +1,19 @@
+bench_nbody;advance;L96: r[1] += dt * vy 146
+bench_nbody;advance;L91: v2[0] += dx * b1m 373
+bench_nbody;advance;L87: b2m = m2 * mag 121
+bench_nbody;advance;L97: r[2] += dt * vz 190
+bench_nbody;advance;L84: dz = z1 - z2 105
+bench_nbody;advance;L92: v2[1] += dy * b1m 314
+bench_nbody;advance;L88: v1[0] -= dx * b2m 355
+bench_nbody;advance;L83: dy = y1 - y2 126
+bench_nbody;advance;L90: v1[2] -= dz * b2m 372
+bench_nbody;advance;L89: v1[1] -= dy * b2m 379
+bench_nbody;advance;L93: v2[2] += dz * b1m 491
+bench_nbody;advance;L80: for (([x1, y1, z1], v1, m1), 236
+bench_nbody;advance;L86: b1m = m1 * mag 83
+bench_nbody;advance;L95: r[0] += dt * vx 167
+bench_nbody;advance;L79: for i in range(n): 16
+bench_nbody;advance;L94: for (r, [vx, vy, vz], m) in bodies: 104
+bench_nbody;advance;L85: mag = dt * ((dx * dx + dy * dy + dz * dz) ** (-1.5)) 866
+bench_nbody;advance;L81: ([x2, y2, z2], v2, m2)) in pairs: 163
+bench_nbody;advance;L82: dx = x1 - x2 118
