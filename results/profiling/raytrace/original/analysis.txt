@@ -1,0 +1,90 @@
+raytrace (original): bottleneck analysis from the flame graph
+=============================================================
+
+Data
+----
+flamegraph.svg          flame graph generated with pyperformance (--hook perf_record),
+                        python3-dbg, perf -e cpu-clock -F 999 -g, all benchmark worker
+                        processes, only the timed benchmark code
+stacks.folded           the collapsed stacks behind the flame graph (183515 samples)
+flamegraph_summary.txt  widest frames and self time grouped by kind of CPython work
+perf_report.txt         perf report --stdio (project guide command)
+perf_stat.txt           hardware counters for a fixed amount of work
+
+How to read it
+--------------
+With Python 3.10 perf sees CPython's C functions, not Python function names, so
+the flame graph tells us WHAT KIND of work the interpreter is doing. Reading the
+code (the functions called per pixel) tells us WHERE it comes from.
+
+What the flame graph shows (self time)
+--------------------------------------
+  28.7%  interpreter loop       _PyEval_EvalFrameDefault
+  19.8%  function calls         call_function 3.5%, frame_dealloc 3.2%,
+                                _PyEval_MakeFrameVector 2.9%,
+                                _PyObject_VectorcallTstate 2.2%, PyTuple_GetItem 2.2%,
+                                _PyEval_Vector 1.3%, _PyFrame_New_NoTrack 1.2%
+  17.7%  attribute/dict lookups _PyDict_GetItemHint 2.4%, _PyType_Lookup 2.0%,
+                                lookdict_split 1.8%, _PyObject_GetMethod 1.8%,
+                                lookdict_unicode_nodummy 1.6%, insertdict 1.0%,
+                                new_dict, dict_dealloc, _PyObjectDict_SetItem
+  11.0%  debug-build checks     only exist in python3-dbg, ignored
+   8.2%  other
+   5.5%  float arithmetic
+   4.0%  float objects
+   2.1%  object creation        object_new / type_call / slot_tp_init
+   0.1%  math library           the math itself is negligible
+
+Unlike nbody, the math is almost free here. The time goes into Python calls
+and attribute access, i.e. the object-oriented structure of the code.
+
+Bottlenecks and what they point to in the code
+----------------------------------------------
+1. Function calls (19.8%): many tiny Python methods
+   Every Python call creates and destroys a frame (_PyEval_MakeFrameVector,
+   _PyFrame_New_NoTrack, frame_dealloc). The per-pixel code is built from
+   very small methods of Vector and Point:
+       Sphere.intersectionTime(ray):
+           cp = self.centre - ray.point     -> Point.__sub__ -> isPoint()
+                                               -> Vector.__init__
+           v = cp.dot(ray.vector)           -> dot -> mustBeVector()
+           cp.dot(cp)                       -> dot -> mustBeVector()
+       -> ~7 Python calls to test ONE ray against ONE object, for every
+          object, for every camera ray, reflected ray and shadow ray.
+   Scene._lightIsVisible(l, p):
+       for (o, s) in self.objects:
+           o.intersectionTime(Ray(p, l - p))
+       -> Ray(p, l - p) is the same for every object but is rebuilt inside the
+          loop: __sub__, Ray.__init__, normalized, magnitude, dot, scale,
+          Vector.__init__ ... again for each object.
+   -> Optimization "sphere_floats": compute intersectionTime with plain floats
+      (same math, same order): no temporary Vector, no dot/__sub__/isPoint/
+      mustBeVector calls. Measured 1.34x faster, image bit-identical.
+   -> Optimization "shadow_ray": build the shadow ray once per light, outside
+      the object loop. Measured 1.30x faster, image bit-identical.
+
+2. Attribute / dict lookups (17.7%): per-object dictionaries
+   lookdict_split and _PyDict_GetItemHint are reads of instance attributes
+   from each object's __dict__ (self.x, other.y, ...). insertdict, new_dict,
+   _PyObjectDict_SetItem and dict_dealloc are the creation and destruction of
+   that dictionary every time a Vector or Point is constructed.
+   -> Optimization "slots": __slots__ = ('x', 'y', 'z') on Vector and Point,
+      so objects have fixed attribute slots and no dictionary.
+      Measured 1.12x faster, image bit-identical.
+
+Combined ("combined" = all three): 2.10x faster, image bit-identical.
+
+Confirmation in the optimized flame graph (results/profiling/raytrace/optimized)
+--------------------------------------------------------------------------------
+  attribute/dict lookups  17.7% -> 10.8%   (lookdict_split 1.8% -> 0.5%,
+                                            _PyDict_GetItemHint 2.4% -> 1.0%)
+  function calls          19.8% -> 16.3%
+  object creation          2.1% -> 1.4%
+  (shares of a total that is itself 2.1x smaller)
+
+Hardware counters (perf_stat.txt, same fixed work)
+--------------------------------------------------
+  instructions 25.5 B, 2.60 instructions per cycle, branch misses 0.32%,
+  cache misses 1.0%.
+  Not a memory or branch prediction problem: the cost is the number of
+  instructions spent on calls and lookups.

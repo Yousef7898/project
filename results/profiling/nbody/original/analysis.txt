@@ -1,0 +1,76 @@
+nbody (original): bottleneck analysis from the flame graph
+==========================================================
+
+Data
+----
+flamegraph.svg          flame graph generated with pyperformance (--hook perf_record),
+                        python3-dbg, perf -e cpu-clock -F 999 -g, all benchmark worker
+                        processes, only the timed benchmark code
+stacks.folded           the collapsed stacks behind the flame graph (40542 samples)
+flamegraph_summary.txt  widest frames and self time grouped by kind of CPython work
+perf_report.txt         perf report --stdio (project guide command)
+perf_stat.txt           hardware counters for a fixed amount of work
+
+How to read it
+--------------
+With Python 3.10 perf sees CPython's C functions, not Python function names, so
+the flame graph tells us WHAT KIND of work the interpreter is doing. The code
+tells us WHERE that work comes from. nbody's timed code is essentially one
+function, advance(), so the mapping is direct.
+
+What the flame graph shows (self time)
+--------------------------------------
+  44.9%  interpreter loop       _PyEval_EvalFrameDefault
+  19.4%  float arithmetic       binary_op1, float_mul, float_add, float_sub, pow
+  14.8%  list indexing          list_ass_item 2.5%, PyNumber_AsSsize_t 2.3%,
+                                list_ass_subscript 1.7%, _PyNumber_Index 1.6%,
+                                PyObject_GetItem 1.5%, list_item 1.4%, PyObject_SetItem 1.4%
+  12.9%  float objects          float_dealloc 4.2%, PyFloat_FromDouble 3.9%,
+                                _Py_NewReference 1.8%, get_float_state 1.6%, _Py_Dealloc 1.4%
+   3.8%  debug-build checks     only exist in python3-dbg, ignored
+   1.8%  math library           __ieee754_pow_fma (the ** operator)
+   0.9%  function calls
+   0.0%  attribute lookups
+
+Bottlenecks and what they point to in the code
+----------------------------------------------
+1. List indexing (14.8%) + part of the interpreter loop
+   In advance() every velocity and position update is a list read and a list
+   write:
+       v1[0] -= dx * b2m        (PyObject_GetItem -> list_item, then
+       r[0]  += dt * vx          PyObject_SetItem -> list_ass_subscript ->
+                                 list_ass_item, index converted by
+                                 PyNumber_AsSsize_t / _PyNumber_Index)
+   6 updates per pair x 10 pairs + 3 per body x 5 bodies = 75 list reads and 75
+   list writes per step, 20000 steps per run. Each one is several C calls and
+   extra bytecodes (LOAD_CONST index, BINARY_SUBSCR, DUP_TOP_TWO, STORE_SUBSCR).
+   -> Optimization "locals": copy positions and velocities into local
+      variables for the whole advance() call (LOAD_FAST/STORE_FAST, no calls)
+      and write them back to the lists once at the end.
+      Measured: 1.60x faster, output bit-identical.
+      Confirmed in the optimized flame graph: list indexing 14.8% -> 0.0%.
+
+2. Float arithmetic (19.4%) and float objects (12.9%)
+   Every + - * on floats dispatches through binary_op1 and allocates a new
+   float object (PyFloat_FromDouble) and frees the old one (float_dealloc).
+   This is inherent to Python floats: pure-Python rewrites can only reduce
+   the number of operations, not the cost of each one.
+   -> Not removable in software without leaving Python. This is the
+      motivation for the hardware accelerator (hw/nbody_accel), where each
+      float operation is a pipeline stage with no allocation or dispatch.
+      After "locals" these two categories grow to 31% and 20% of the (smaller)
+      total: they become the dominant cost.
+
+3. The ** operator (libm pow, 1.8%)
+   pow is only 1.8% of the time, so replacing d2 ** (-1.5) with
+   1 / (d2 * sqrt(d2)) can save at most ~2%, and calling sqrt from Python
+   adds a lookup and a call.
+   -> Tested anyway ("sqrt", and sqrt as a local variable): 1.01x slower and
+      not significant respectively, as the flame graph predicts. Dropped.
+
+Hardware counters (perf_stat.txt, same fixed work)
+--------------------------------------------------
+  instructions 8.71 B, 2.94 instructions per cycle, branch misses 0.37%,
+  cache misses 4.3% of a small number of cache references.
+  Branch prediction and memory are not the problem: the cost is the number of
+  instructions the interpreter executes per float operation.
