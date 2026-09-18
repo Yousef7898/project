@@ -22,3 +22,5 @@ The prompts below are copied exactly as typed, in order.
 9. ok we have reviewed them they look good , you can commit , prerpare commits in a way that shows how we advacned through this missed step
 
 10. now here is the thing now we need to make hardware accelrator to improve one of the testbenches , we went with nbody we chose to accelerate the whole advance loop of nbody (pair forces , velocty and poistion updates ) since the profiel shows almost all the time is there and most of it is pyhthon overhead around simplae float math , use IEEE double like python so the rsults stay the same (we will switche sqrt instead of pow , non releavnt diffrence) , first lets start with architriture spec , can you usggest an interface with widths opertaing frequncy registers map pipline and control , and how softare talks to it
+
+11. ok we like the spec after reviwing sounds good , implement the floating point  units in verilog and write tests for each againt the python results bit for igt with many random and edge cases vectors
