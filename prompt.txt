@@ -30,3 +30,5 @@ The prompts below are copied exactly as typed, in order.
 13. now lets write a software side , a python dirver that the benchmakr can call like advance it should write the bodies to the accerlartos register start it  wait and read back and if ther is no accelrator it should just run the software and nothing breaks test noth ways
 
 14. ok now lets add a script one sciprt that builds and run all hardware tests so anyone can repordiuce themm
+
+15. now lets esitamte the speed up using our mesaured numbers the pupterfomance times and the cycle counts from simulation, and write down the assumption and draw a block diagram of the accelratos and how it connects to the host though pcie

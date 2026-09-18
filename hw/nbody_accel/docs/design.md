@@ -217,6 +217,7 @@ N=5 (benchmark): 60 + 55 + 84 = 199 cycles x 10 ns = 1.99 us per step
   bit-identical.
 - `run_tests.sh` rebuilds and reruns everything.
 
+Performance estimate: `docs/performance.md`. Trade-offs: `docs/tradeoffs.md`.
 
 ## 6. Software side
 `hw/nbody_accel/sw/nbody_accel_driver.py`

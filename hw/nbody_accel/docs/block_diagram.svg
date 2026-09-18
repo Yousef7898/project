@@ -1,0 +1,116 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="640" viewBox="0 0 1100 640" font-family="Helvetica, Arial, sans-serif" font-size="13">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#333"/>
+    </marker>
+    <style>
+      .box { fill:#fff; stroke:#333; stroke-width:1.5; rx:6; }
+      .host { fill:#eef4fb; stroke:#3b6ea5; stroke-width:1.5; rx:10; }
+      .card { fill:#f4f8ef; stroke:#5a8a3a; stroke-width:1.5; rx:10; }
+      .fp { fill:#fff7e6; stroke:#c08a2d; stroke-width:1.2; rx:4; }
+      .t { font-weight:bold; }
+      .s { font-size:11px; fill:#444; }
+      .ln { stroke:#333; stroke-width:1.4; fill:none; marker-end:url(#arr); }
+      .bus { stroke:#3b6ea5; stroke-width:5; fill:none; }
+    </style>
+  </defs>
+
+  <text x="550" y="26" text-anchor="middle" font-size="18" class="t">nbody force accelerator: system block diagram</text>
+
+  <!-- HOST -->
+  <rect class="host" x="20" y="50" width="260" height="560"/>
+  <text x="150" y="74" text-anchor="middle" class="t">HOST (CPU)</text>
+  <rect class="box" x="45" y="95" width="210" height="70"/>
+  <text x="150" y="118" text-anchor="middle" class="t">Python benchmark</text>
+  <text x="150" y="138" text-anchor="middle" class="s">advance(dt, n, bodies, pairs)</text>
+  <text x="150" y="154" text-anchor="middle" class="s">(unchanged call)</text>
+  <rect class="box" x="45" y="195" width="210" height="130"/>
+  <text x="150" y="218" text-anchor="middle" class="t">nbody_accel_driver.py</text>
+  <text x="150" y="238" text-anchor="middle" class="s">device present?</text>
+  <text x="150" y="255" text-anchor="middle" class="s">no  → software advance()</text>
+  <text x="150" y="272" text-anchor="middle" class="s">yes → write N, steps, dt, bodies</text>
+  <text x="150" y="289" text-anchor="middle" class="s">START, wait DONE / irq</text>
+  <text x="150" y="306" text-anchor="middle" class="s">read bodies back (70 MMIO ops)</text>
+  <rect class="box" x="45" y="355" width="210" height="70"/>
+  <text x="150" y="378" text-anchor="middle" class="t">OS: PCIe driver / UIO</text>
+  <text x="150" y="398" text-anchor="middle" class="s">mmap BAR0, IOMMU, interrupt</text>
+  <rect class="box" x="45" y="455" width="210" height="60"/>
+  <text x="150" y="480" text-anchor="middle" class="t">PCIe root complex</text>
+  <text x="150" y="498" text-anchor="middle" class="s">BAR0 → device address space</text>
+  <path class="ln" d="M150,165 L150,193"/>
+  <path class="ln" d="M150,325 L150,353"/>
+  <path class="ln" d="M150,425 L150,453"/>
+
+  <!-- PCIe link -->
+  <path class="bus" d="M255,485 L330,485"/>
+  <text x="292" y="472" text-anchor="middle" class="s">PCIe link</text>
+
+  <!-- CARD -->
+  <rect class="card" x="330" y="50" width="750" height="560"/>
+  <text x="705" y="74" text-anchor="middle" class="t">ACCELERATOR CARD (FPGA): nbody_accel_top, clk 100 MHz</text>
+
+  <rect class="box" x="350" y="430" width="170" height="110"/>
+  <text x="435" y="452" text-anchor="middle" class="t">PCIe endpoint</text>
+  <text x="435" y="470" text-anchor="middle" class="s">(vendor IP)</text>
+  <text x="435" y="492" text-anchor="middle" class="s">MMIO bus: addr 16,</text>
+  <text x="435" y="508" text-anchor="middle" class="s">wen/ren, wdata/rdata 64</text>
+  <text x="435" y="524" text-anchor="middle" class="s">irq_done</text>
+  <path class="bus" d="M330,485 L350,485"/>
+
+  <rect class="box" x="350" y="100" width="190" height="300"/>
+  <text x="445" y="122" text-anchor="middle" class="t">MMIO registers</text>
+  <text x="445" y="146" text-anchor="middle" class="s">0x00 ID "NBODYACC"</text>
+  <text x="445" y="164" text-anchor="middle" class="s">0x08 CTRL (START)</text>
+  <text x="445" y="182" text-anchor="middle" class="s">0x10 STATUS (BUSY, DONE)</text>
+  <text x="445" y="200" text-anchor="middle" class="s">0x18 NUM_BODIES (≤16)</text>
+  <text x="445" y="218" text-anchor="middle" class="s">0x20 NUM_STEPS</text>
+  <text x="445" y="236" text-anchor="middle" class="s">0x28 DT (double)</text>
+  <text x="445" y="254" text-anchor="middle" class="s">0x30 STEPS_DONE, 0x38 CYCLES</text>
+  <rect class="box" x="370" y="272" width="150" height="110"/>
+  <text x="445" y="294" text-anchor="middle" class="t">body state</text>
+  <text x="445" y="314" text-anchor="middle" class="s">0x1000 + 0x40·b</text>
+  <text x="445" y="332" text-anchor="middle" class="s">x y z vx vy vz m</text>
+  <text x="445" y="350" text-anchor="middle" class="s">7 × 64 bit × 16 bodies</text>
+  <path class="ln" d="M435,430 L435,402"/>
+
+  <rect class="box" x="580" y="100" width="210" height="110"/>
+  <text x="685" y="122" text-anchor="middle" class="t">Controller FSM</text>
+  <text x="685" y="144" text-anchor="middle" class="s">IDLE → FEED → DRAIN → ACC</text>
+  <text x="685" y="162" text-anchor="middle" class="s">→ POS → STEP_END → FEED / IDLE</text>
+  <text x="685" y="182" text-anchor="middle" class="s">counters: step, pair (i,j), body</text>
+  <path class="ln" d="M540,150 L578,150"/>
+  <text x="559" y="143" text-anchor="middle" class="s">START</text>
+
+  <rect class="box" x="830" y="100" width="230" height="330"/>
+  <text x="945" y="122" text-anchor="middle" class="t">pair_force pipeline</text>
+  <text x="945" y="139" text-anchor="middle" class="s">81 cycles, 1 new pair per cycle</text>
+  <rect class="fp" x="850" y="150" width="190" height="26"/><text x="945" y="168" text-anchor="middle" class="s">S1 dx,dy,dz = pi − pj (3 add)</text>
+  <rect class="fp" x="850" y="180" width="190" height="26"/><text x="945" y="198" text-anchor="middle" class="s">S2 dx²,dy²,dz² (3 mul)</text>
+  <rect class="fp" x="850" y="210" width="190" height="26"/><text x="945" y="228" text-anchor="middle" class="s">S3–S4 d2 = dx²+dy²+dz² (2 add)</text>
+  <rect class="fp" x="850" y="240" width="190" height="26"/><text x="945" y="258" text-anchor="middle" class="s">S5 r = sqrt(d2) (28 st.)</text>
+  <rect class="fp" x="850" y="270" width="190" height="26"/><text x="945" y="288" text-anchor="middle" class="s">S6 den = d2 · r (mul)</text>
+  <rect class="fp" x="850" y="300" width="190" height="26"/><text x="945" y="318" text-anchor="middle" class="s">S7 mag = dt / den (28 st.)</text>
+  <rect class="fp" x="850" y="330" width="190" height="26"/><text x="945" y="348" text-anchor="middle" class="s">S8 b1m, b2m = m·mag (2 mul)</text>
+  <rect class="fp" x="850" y="360" width="190" height="26"/><text x="945" y="378" text-anchor="middle" class="s">S9 6 velocity deltas (6 mul)</text>
+  <text x="945" y="412" text-anchor="middle" class="s">delay lines: dx,dy,dz, m, d2, tag</text>
+  <path class="ln" d="M520,300 C640,300 700,250 848,163"/>
+  <text x="690" y="262" text-anchor="middle" class="s">positions, masses of pair (i,j)</text>
+  <path class="ln" d="M790,130 L828,130"/>
+
+  <rect class="box" x="580" y="450" width="200" height="70"/>
+  <text x="680" y="472" text-anchor="middle" class="t">pair result buffer</text>
+  <text x="680" y="492" text-anchor="middle" class="s">6 × 64 bit × 120 pairs</text>
+  <text x="680" y="508" text-anchor="middle" class="s">indexed by pair tag</text>
+  <path class="ln" d="M945,430 C945,480 860,485 782,485"/>
+
+  <rect class="box" x="830" y="460" width="230" height="130"/>
+  <text x="945" y="482" text-anchor="middle" class="t">velocity accumulator</text>
+  <text x="945" y="500" text-anchor="middle" class="s">6 add, pairs applied in order:</text>
+  <text x="945" y="516" text-anchor="middle" class="s">v_i −= dv_i,  v_j += dv_j</text>
+  <text x="945" y="542" class="t" text-anchor="middle">position update</text>
+  <text x="945" y="560" text-anchor="middle" class="s">3 mul + 3 add per body:</text>
+  <text x="945" y="576" text-anchor="middle" class="s">x += dt · vx</text>
+  <path class="ln" d="M780,500 L828,510"/>
+  <path class="ln" d="M830,560 C700,600 470,600 450,384"/>
+  <text x="640" y="598" text-anchor="middle" class="s">new velocities and positions → body state</text>
+</svg>
