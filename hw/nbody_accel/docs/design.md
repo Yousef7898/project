@@ -114,6 +114,7 @@ one register holds one double.
 | 0x0020 | `NUM_STEPS`  | RW | 64 | number of time steps (32 bits used) |
 | 0x0028 | `DT`         | RW | 64 | time step, IEEE-754 double |
 | 0x0030 | `STEPS_DONE` | R  | 64 | progress counter |
+| 0x0038 | `CYCLES`     | R  | 64 | clock cycles of the last run (performance counter) |
 | 0x1000 + 0x40*b + 8*f | `BODY[b].field[f]` | RW | 64 | f: 0 x, 1 y, 2 z, 3 vx, 4 vy, 5 vz, 6 m |
 
 Body registers are written by the host only while not busy.
@@ -194,15 +195,28 @@ STEP_END --steps_done < NUM_STEPS--> FEED
 STEP_END --steps_done == NUM_STEPS--> IDLE (DONE=1, irq)
 ```
 
-### 5.4 Cycle estimate per time step (N bodies, P = N(N-1)/2 pairs)
+### 5.4 Cycles per time step (measured)
+Measured with the RTL system test (`tb/tb_nbody_accel.v`, CYCLES register) for
+N = 2, 3, 5 and 16 bodies; all four fit exactly:
 ```
-FEED + DRAIN : P + 81        (pairs enter one per cycle, last exits after 81)
-ACC          : 4P
-POS          : 8N
-total        : 5P + 81 + 8N
-N=5, P=10    : 50 + 81 + 40 = 171 cycles x 10 ns = 1.71 us per step (estimate)
+cycles per step = 6P + 11N + 84        (P = N(N-1)/2 pairs)
+  84  : pair pipeline latency (81) + feed/drain control
+  6P  : velocity accumulation, pair by pair
+  11N : position update, body by body
+N=5 (benchmark): 60 + 55 + 84 = 199 cycles x 10 ns = 1.99 us per step
 ```
-The exact count will be measured in simulation (`hw/nbody_accel/tb`).
+
+### 5.5 Verification
+- Floating-point operators: `tb/tb_fp_units.v`, 274k random and edge-case
+  vectors against Python's IEEE-754 results, bit for bit, 0 errors.
+- Whole accelerator, driven only through its MMIO registers
+  (`tb/tb_nbody_accel.v`), against the golden model, which is itself checked
+  bit for bit against the benchmark code (`nbody/optimized/sqrt`):
+  N = 2, 3, 16 bodies, and the real benchmark scene, including a full
+  benchmark call `advance(0.01, 20000)`: 3,980,000 cycles, all 35 values
+  bit-identical.
+- `run_tests.sh` rebuilds and reruns everything.
+
 
 ## 6. Software side
 `hw/nbody_accel/sw/nbody_accel_driver.py`
