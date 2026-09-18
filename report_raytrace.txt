@@ -1,0 +1,327 @@
+================================================================================
+ REPORT: raytrace
+ HW/SW co-design project: benchmark optimization, analysis and hardware
+ acceleration proposal
+================================================================================
+
+Environment
+-----------
+QEMU VM (course image), Ubuntu 22.04, kernel 5.15.0-1106-kvm, 1 vCPU, 3.8 GB.
+Python 3.10.12 (+ python3-dbg for symbols), pyperformance 1.14.0 (pyperf 2.10),
+perf 5.15, py-spy 0.4.2.
+Everything in this report is reproduced by script_raytrace.sh.
+
+
+1. OVERVIEW
+================================================================================
+
+What the benchmark does
+-----------------------
+raytrace renders a 100 x 100 pixel image of a 3D scene with a simple ray
+tracer written in pure Python. The scene: one large yellow sphere, a row of
+six small spheres, a checkerboard floor, and two point lights, seen by a
+camera with a 45 degree field of view. One benchmark iteration renders the
+whole image once.
+
+For every pixel a ray is shot from the camera into the scene:
+  1. find the closest object the ray hits (ray-sphere and ray-plane
+     intersection)
+  2. compute the colour at the hit point from three parts:
+     - specular: a reflected ray is traced recursively (reflections of
+       reflections, up to 4 levels deep)
+     - diffuse (Lambert): for each light, a shadow ray checks whether any
+       object blocks the light
+     - ambient: a constant share of the surface colour
+  3. write the colour into the image buffer
+
+Libraries
+---------
+Only the standard library: math (sqrt, tan, pi), array (the pixel buffer),
+and pyperf (the timing harness used by pyperformance). No numeric library.
+
+Data structures
+---------------
+- Vector and Point: small classes with x, y, z attributes and methods for
+  +, -, dot, cross, scale, magnitude, normalized, reflectThrough; plus type
+  "checks" isVector/isPoint/mustBeVector/mustBePoint used by the operators.
+  Almost every arithmetic step creates a new Vector or Point object.
+- Ray: a start Point and a normalized direction Vector.
+- Sphere (centre, radius) and Halfspace (point, normal) with
+  intersectionTime(ray) and normalAt(point).
+- SimpleSurface / CheckerboardSurface: colour and reflection coefficients.
+- Scene: a list of (object, surface) tuples, a list of light points, the
+  camera, and the recursion depth counter used to stop reflections.
+- Canvas: an array('B') of RGB bytes (the image).
+
+Algorithm
+---------
+Scene.render loops over all pixels; rayColour finds the first intersection
+(a list comprehension over all 8 objects, then the smallest positive time);
+the surface's colourAt calls rayColour again for the reflection (recursion)
+and visibleLights -> _lightIsVisible for the shadow rays, which again test
+the ray against every object. The ray-sphere test solves the quadratic
+equation: with cp = centre - origin and v = cp . direction,
+discriminant = r^2 - (cp . cp - v^2), hit time = v - sqrt(discriminant).
+The cost per pixel is dominated by the number of intersection tests:
+objects x (1 primary + reflections + 2 shadow rays per hit).
+
+
+2. INITIAL ANALYSIS
+================================================================================
+
+2.1 Method: how we found the bottlenecks
+----------------------------------------
+Baseline first (pyperformance, section 4), then profiling of the original
+code, in this order:
+
+a) perf report, as in the project guide:
+       perf record -F 999 -g -- python3-dbg -m pyperformance run --bench raytrace
+       perf report --stdio > perf_report.txt
+   (-e cpu-clock was added: in this VM hardware-cycle sampling records no
+   samples). The top functions were not arithmetic: the interpreter loop
+   (26%), then function-call machinery (call_function, frame_dealloc,
+   _PyEval_MakeFrameVector) and dictionary lookups (_PyDict_GetItemHint,
+   lookdict_split, _PyType_Lookup, _PyObject_GetMethod).
+   This told us WHAT KIND of work: calls and attribute lookups.
+
+b) cProfile (Python's built-in profiler), to see WHICH Python functions,
+   with call counts, for one rendered image (before the flame graphs):
+       3.09 million Python function calls for one 100 x 100 image
+       Vector.__init__       452,943 calls   (new Vector objects)
+       mustBeVector          520,539 calls   (a method that does nothing)
+       dot                   509,871 calls
+       Point.__sub__ / isPoint  277,865 calls each
+       Sphere.intersectionTime  179,457 calls, 40% of the time including
+                                what it calls
+       Scene._lightIsVisible    47% of the time including what it calls
+   Reading _lightIsVisible showed that it builds the shadow ray
+   Ray(p, l - p) inside the loop over objects, although the ray is the same
+   for every object.
+
+c) perf stat hardware counters, to know WHY (memory? branches? instructions?).
+
+d) Flame graphs, as the project asks, generated with pyperformance:
+       python3-dbg -m pyperformance run --bench raytrace --hook perf_record
+   (only the timed code of every benchmark worker is recorded).
+
+e) Python-level flame graphs with py-spy. With Python 3.10, perf sees only
+   CPython's C functions (no Python names, and no call tree because CPython
+   is built without frame pointers). py-spy samples Python's own frames, so
+   its flame graph shows the call tree, function names and source lines.
+
+Files (results/profiling/raytrace/original/):
+  perf_report.txt         a)   perf report --stdio
+  perf_stat.txt           c)   counters for a fixed amount of work
+  flamegraph.svg          d)   flame graph from pyperformance (C level)
+  flamegraph_summary.txt  d)   the same as text: widest frames, time by category
+  pyspy_flamegraph.svg    e)   Python-level flame graph
+  pyspy_top.txt           e)   hottest Python lines
+  analysis.txt                 the full analysis
+
+2.2 What the flame graph from pyperformance shows (C level, self time)
+---------------------------------------------------------------------
+  28.7%  interpreter loop          _PyEval_EvalFrameDefault
+  19.8%  function calls            call_function 3.5%, frame_dealloc 3.2%,
+                                   _PyEval_MakeFrameVector 2.9%, ...
+  17.7%  attribute/dict lookups    _PyDict_GetItemHint 2.4%, _PyType_Lookup 2.0%,
+                                   lookdict_split 1.8%, _PyObject_GetMethod 1.8%,
+                                   insertdict, new_dict, dict_dealloc
+  11.0%  debug-build checks        exist only in python3-dbg, ignored
+   5.5%  float arithmetic
+   4.0%  float objects
+   2.1%  object creation
+   0.1%  math library
+(183515 samples, 0 lost)
+Unlike nbody, the math is almost free here: the time goes into Python calls
+and attribute access, i.e. the object-oriented structure of the code.
+
+2.3 What the py-spy flame graph shows (Python level, share of run time)
+----------------------------------------------------------------------
+A full call pyramid:
+  bench_raytrace > render > rayColour (89%) > colourAt (67%)
+    > visibleLights > _lightIsVisible                   45.9%   shadow rays
+        > Ray.__init__ (builds and normalizes the ray)   14.2%
+        > __sub__  (l - p)                                6.5%
+        > line 285: o.intersectionTime(Ray(p, l - p))     6.9%
+        > intersectionTime                               17.5%
+  intersectionTime, from all callers                     43.0%
+        dot       20.1% (including mustBeVector)
+        __sub__   22.3% (including isPoint and Vector.__init__)
+(6018 samples inside the benchmark function, 99.2% of all samples)
+The tallest column is the reflection recursion rayColour > colourAt >
+rayColour ...: tall but thin. In a flame graph width is time, height is only
+call depth.
+
+py-spy charges a function with everything the interpreter does for it;
+perf splits the same time by C function. The two views agree.
+
+2.4 What the counters show (perf stat, same fixed work)
+-------------------------------------------------------
+  instructions     25.5 billion
+  IPC              2.60 instructions per cycle
+  branch misses    0.32% of branches
+  cache misses     1.0%
+Not a memory or branch-prediction problem: the cost is the number of
+instructions spent on calls and lookups.
+
+2.5 Bottlenecks
+---------------
+1. The shadow ray is rebuilt for every object (line 285): about 28% of the
+   run time goes into constructing the same Ray again and again
+   (l - p, Ray.__init__, normalized, magnitude, dot, scale, Vector.__init__).
+2. Sphere.intersectionTime, the hottest function (43% including callees),
+   is built from tiny method calls (__sub__, isPoint, dot, mustBeVector) and
+   creates a temporary Vector for every ray-object test: about 7 Python calls
+   per test. Every Python call creates and destroys a frame (function calls
+   19.8% of C-level time).
+3. Every Vector/Point has its own attribute dictionary: creating an object
+   creates a dictionary (insertdict, new_dict, dict_dealloc), and every
+   self.x is a dictionary lookup (lookdict_split). 453k Vectors per image.
+Not a bottleneck: the math itself (float arithmetic 5.5%, math library 0.1%),
+memory, branches.
+
+
+3. OPTIMIZATIONS
+================================================================================
+The original code is kept untouched in raytrace/original/. Each change is a
+separate variant (raytrace/optimized/<name>/, with its own pyperformance
+MANIFEST), measured on its own, then all three together.
+raytrace/verify_raytrace.py renders the scene with every variant (at the
+benchmark's 100 x 100 and at 200 x 150) and compares the raw pixel bytes
+with the original. All variants produce bit-identical images.
+
+3.1 "shadow_ray": build the shadow ray once
+-------------------------------------------
+What: in _lightIsVisible, Ray(p, l - p) is created once before the loop over
+objects instead of once per object.
+Why it helps: the ray does not depend on the object. Building it costs a
+vector subtraction, a normalization (magnitude -> dot -> sqrt -> scale) and
+several new objects; with 8 objects this work was done up to 8 times (the
+loop stops at the first object that blocks the light) instead of once, for
+every shadow ray (bottleneck 1).
+Output: identical image (the same ray is used, only computed once).
+
+3.2 "sphere_floats": intersectionTime with plain floats
+-------------------------------------------------------
+What: Sphere.intersectionTime computes cp and the two dot products directly
+with float variables (cpx = centre.x - point.x, ...), in the same order as
+the original, instead of creating a temporary Vector and calling
+__sub__/isPoint/dot/mustBeVector.
+Why it helps: the ~7 Python calls per ray-object test (Point.__sub__,
+isPoint, Vector.__init__, 2 x dot, 2 x mustBeVector) and the temporary
+Vector disappear, in the hottest function (bottleneck 2).
+Output: identical image (same operations in the same order, so the same
+floating-point results).
+
+3.3 "slots": __slots__ on Vector and Point
+------------------------------------------
+What: __slots__ = ('x', 'y', 'z') in the Vector and Point classes.
+Why it helps: the objects get three fixed attribute slots instead of a
+per-object dictionary, so creating one no longer creates a dictionary and
+reading self.x is a fixed-offset access instead of a dictionary lookup
+(bottleneck 3).
+Output: identical image (only the storage of the attributes changes).
+
+3.4 "combined": all three
+-------------------------
+The final optimized version is raytrace/optimized/combined.
+Output: identical image.
+
+3.5 Considered and not done
+---------------------------
+Removing the no-op type checks (mustBeVector, isPoint) everywhere: the
+hottest place (intersectionTime) no longer calls them after sphere_floats,
+so it was left out.
+
+
+4. PERFORMANCE COMPARISON
+================================================================================
+pyperformance run --rigorous (20 processes x 3 values = 120 values per
+benchmark), after "pyperf system tune". The first default run had a spread
+of +-84 ms (+-10%) on this one-CPU VM, larger than the 7% we had to show;
+tuning plus more samples brought it to +-19 ms.
+Raw data: results/*.json. Commands: results/raytrace_commands.log.
+
+4.1 Baseline
+------------
+  baseline (results/baseline_rigorous.json):
+    median 808.7 ms (MAD 4.4)   mean 812.1 ± 19.4 ms   min 796.7   P95 827.3
+
+4.2 Each change on its own and combined (one session, results/raytrace_*.json)
+-----------------------------------------------------------------------------
+  version         median     MAD   mean ± std          vs original (pyperf)
+  original        807.0 ms   5.5   811.2 ± 19.2 ms     -
+  shadow_ray      620.7 ms   3.3   623.3 ± 16.3 ms     1.30x faster
+  sphere_floats   601.1 ms   3.3   605.6 ± 17.8 ms     1.34x faster
+  slots           719.1 ms   4.5   723.0 ± 16.5 ms     1.12x faster
+  combined        385.0 ms   2.7   386.3 ±  7.4 ms     2.10x faster
+
+  combined vs each single change (pyperf, all significant):
+    1.61x faster than shadow_ray, 1.57x than sphere_floats, 1.87x than slots
+
+  The savings do not simply add up: separately they save 186 + 206 + 88 =
+  480 ms, which would predict ~327 ms, but combined gives 385 ms. The
+  changes overlap: fewer shadow rays also means fewer Vector objects for
+  __slots__ to speed up and fewer intersection tests to make cheaper.
+
+4.3 Result
+----------
+  final optimized (combined): 807.0 ms -> 385.0 ms median
+                              52% less time, 2.10x faster
+  The project asks for at least 7%.
+
+4.4 Counters before and after (perf stat, same fixed work)
+---------------------------------------------------------
+                  original      optimized
+  instructions    25.5 B        12.3 B    (-52%)
+  IPC             2.60          2.55
+  branch misses   0.32%         0.55%
+  cache misses    1.0%          1.2%
+The speedup comes from executing half the instructions: fewer calls, fewer
+objects, fewer dictionary lookups. Memory and branch behaviour barely change.
+
+4.5 Flame graphs before and after
+---------------------------------
+  C level (results/profiling/raytrace/optimized/flamegraph_summary.txt):
+    attribute/dict lookups 17.7% -> 10.8%  (lookdict_split 1.8% -> 0.5%)
+    function calls         19.8% -> 16.3%
+    object creation         2.1% ->  1.4%
+  Python level (results/profiling/raytrace/optimized/pyspy_top.txt):
+    _lightIsVisible 45.9% -> 26.5%, dot 20.1% -> 6.9%, __sub__ 22.3% -> 5.4%;
+    intersectionTime is now mostly its own float math.
+  (shares of a total that is itself 2.1x smaller)
+
+
+5. HARDWARE ACCELERATION PROPOSAL
+================================================================================
+Not applicable to raytrace: the project asks for a hardware accelerator for
+one selected benchmark component, and we chose nbody (see report_nbody.txt,
+section 5, and hw/nbody_accel/).
+
+Why nbody and not raytrace: raytrace's time is in Python function calls and
+attribute lookups; the actual math (float arithmetic + math library) is only
+about 6% of the time. A hardware unit for the ray-sphere intersection would
+accelerate that small part while the calls and object creation around it
+stay in Python. In nbody, a single loop (advance) is essentially the whole
+benchmark and can be moved to hardware completely, with one transfer in and
+out per call.
+
+
+6. CONCLUSION
+================================================================================
+- The profiles (perf report, cProfile, pyperformance and py-spy flame graphs,
+  counters) show that raytrace's time is not the ray-tracing math: it is the
+  cost of its object-oriented structure, about 3 million Python calls and
+  450k temporary Vector objects per image, plus a shadow ray rebuilt for
+  every object.
+- Three targeted changes, each measured on its own and each producing a
+  bit-identical image: building the shadow ray once (1.30x), computing the
+  sphere intersection with plain floats (1.34x), and __slots__ on Vector and
+  Point (1.12x).
+- Together they make the benchmark 2.10x faster (807.0 -> 385.0 ms median,
+  52% less time, far above the 7% target) by executing about half the
+  instructions. The gains overlap, so the combination is less than the sum
+  of the parts.
+- The flame graphs after the optimization confirm that the targeted
+  categories (dictionary lookups, function calls, shadow ray construction)
+  shrank.
