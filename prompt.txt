@@ -42,3 +42,7 @@ The prompts below are copied exactly as typed, in order.
 19. looks great ! commit
 
 20. ok now write a README.txt and commit it so tht they can knwo the repo structure, requirements, and how to run each script and the hardware tests.
+
+21. yeah preprae a presneatation we will fix it if it needs tell me when you finish so that we review it
+
+22. yeah listen lets add the presneation in its directory and regarding the names add student 1 : yousef atrash , student 2 housin mohammed agbaria, also add a note that the presnsetation is not finalized and it will be before the presnstaion day

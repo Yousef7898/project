@@ -29,6 +29,7 @@ Full write-ups: [`report_nbody.txt`](report_nbody.txt) and
 ├── script_nbody.sh            full pipeline for nbody (setup, verify, profile, benchmark, compare)
 ├── script_raytrace.sh         full pipeline for raytrace
 ├── prompt.txt                 prompts used with the AI tool (Claude Code), in order
+├── presentation/              slides (draft, finalized before the presentation day)
 │
 ├── nbody/
 │   ├── original/              unmodified benchmark from pyperformance 1.14.0
