@@ -1,0 +1,468 @@
+================================================================================
+ REPORT: nbody
+ HW/SW co-design project: benchmark optimization, analysis and hardware
+ acceleration proposal
+================================================================================
+
+Environment
+-----------
+QEMU VM (course image), Ubuntu 22.04, kernel 5.15.0-1106-kvm, 1 vCPU, 3.8 GB.
+Python 3.10.12 (+ python3-dbg for symbols), pyperformance 1.14.0 (pyperf 2.10),
+perf 5.15, py-spy 0.4.2, Icarus Verilog 11.
+Everything in this report is reproduced by script_nbody.sh (software) and
+hw/nbody_accel/run_tests.sh (hardware).
+
+
+1. OVERVIEW
+================================================================================
+
+What the benchmark does
+-----------------------
+nbody simulates the Sun and the four giant planets (Jupiter, Saturn, Uranus,
+Neptune) orbiting under gravity. It is the classic N-body program from the
+Computer Language Benchmarks Game. One benchmark iteration is:
+
+    report_energy()          total energy before
+    advance(0.01, 20000)     20000 time steps of dt = 0.01
+    report_energy()          total energy after
+
+Almost all of the time is in advance().
+
+Libraries
+---------
+Only the Python standard language and pyperf (the timing harness used by
+pyperformance). No numeric library (no NumPy): every operation is plain
+Python float arithmetic.
+
+Data structures
+---------------
+- BODIES: a dict of the 5 bodies; each body is a tuple
+      ([x, y, z], [vx, vy, vz], mass)
+  where position and velocity are Python lists of 3 floats (mutable, updated
+  in place) and mass is a float.
+- SYSTEM: the list of those 5 body tuples.
+- PAIRS: all 10 unordered pairs of bodies, precomputed once as a list of
+  (body_i, body_j) tuples (a hand-written itertools.combinations).
+
+Algorithm (advance)
+-------------------
+For every time step:
+  1. the pair loop: for each of the 10 pairs
+         dx, dy, dz = position differences
+         mag = dt * (dx*dx + dy*dy + dz*dz) ** (-1.5)      (dt / distance^3)
+         v_i -= (dx, dy, dz) * m_j * mag
+         v_j += (dx, dy, dz) * m_i * mag
+  2. the position update: for each body, r += dt * v
+Velocities are updated first and positions use the new velocities
+(semi-implicit / symplectic Euler). The pair loop is O(N^2) in the number of
+bodies; with N = 5 it is 10 pairs per step, 200000 pair computations per
+advance() call. The work per step is tiny and fixed, repeated many times.
+
+
+2. INITIAL ANALYSIS
+================================================================================
+
+2.1 Method: how we found the bottlenecks
+----------------------------------------
+Baseline first (pyperformance, section 4), then profiling of the original
+code, in this order:
+
+a) perf report, as in the project guide:
+       perf record -F 999 -g -- python3-dbg -m pyperformance run --bench nbody
+       perf report --stdio > perf_report.txt
+   (-e cpu-clock was added: in this VM hardware-cycle sampling records no
+   samples). python3-dbg gives the names of CPython's internal C functions.
+   This told us WHAT KIND of work the interpreter does.
+
+b) Reading the code of advance() with that list in hand, and measuring the
+   suspects with small experiments (dis for the bytecode, timeit):
+       reading a local variable        17 ns   (1 bytecode: LOAD_FAST)
+       reading a list element v[0]     33 ns   (3 bytecodes + type/index checks)
+       updating a local   x -= d       38 ns
+       updating a list    v[0] -= d    80 ns
+   This is how we found the first optimization, before the flame graphs.
+
+c) perf stat hardware counters, to know WHY (memory? branches? instructions?).
+
+d) Flame graphs, as the project asks, generated with pyperformance:
+       python3-dbg -m pyperformance run --bench nbody --hook perf_record
+   (pyperformance attaches perf to each benchmark worker and records only
+   while the timed code runs). They show the same bottlenecks as a picture.
+
+e) Python-level flame graphs with py-spy. With Python 3.10, perf sees only
+   CPython's C functions (no Python names, and no call tree because CPython
+   is built without frame pointers), which makes the perf flame graph hard
+   to read. py-spy samples Python's own frames, so its flame graph shows
+   function names and source lines.
+
+Files (results/profiling/nbody/original/):
+  perf_report.txt         a)   perf report --stdio
+  perf_stat.txt           c)   counters for a fixed amount of work
+  flamegraph.svg          d)   flame graph from pyperformance (C level)
+  flamegraph_summary.txt  d)   the same as text: widest frames, time by category
+  pyspy_flamegraph.svg    e)   Python-level flame graph
+  pyspy_top.txt           e)   hottest Python lines
+  analysis.txt                 the full analysis
+
+2.2 What the flame graph from pyperformance shows (C level, self time)
+---------------------------------------------------------------------
+  44.9%  interpreter loop          _PyEval_EvalFrameDefault (bytecode dispatch)
+  19.4%  float arithmetic          binary_op1, float_mul, float_add, float_sub
+  14.8%  list indexing             list_ass_item, PyNumber_AsSsize_t,
+                                   list_ass_subscript, PyObject_GetItem/SetItem
+  12.9%  float objects             PyFloat_FromDouble, float_dealloc (every
+                                   intermediate result is a new heap object)
+   1.8%  math library              pow (the ** operator)
+   3.8%  debug-build checks        exist only in python3-dbg, ignored
+   0.9%  function calls
+(40542 samples, 0 lost. The perf report of the project-guide command shows
+the same functions in the same order.)
+
+2.3 What the py-spy flame graph shows (Python level, share of run time)
+----------------------------------------------------------------------
+The graph is flat, bench_nbody > advance, because advance() calls no other
+Python function; the information is in the top row, the source lines:
+
+   18.3%  L85  mag = dt * ((dx * dx + dy * dy + dz * dz) ** (-1.5))
+    7.5%  L88  v1[0] -= dx * b2m
+    8.0%  L89  v1[1] -= dy * b2m
+    7.9%  L90  v1[2] -= dz * b2m
+    7.9%  L91  v2[0] += dx * b1m
+    6.6%  L92  v2[1] += dy * b1m
+   10.4%  L93  v2[2] += dz * b1m          lines 88-93 together: 48.3%
+    8.4%  L80-81  for (([x1, y1, z1], v1, m1), (...)) in pairs   (unpacking)
+   10.6%  L95-97  r[0] += dt * vx  ...    position updates
+(4725 samples inside the benchmark function, 99.4% of all samples)
+
+py-spy charges a line with everything the interpreter does for it (dispatch,
+float objects, list access, arithmetic); perf splits the same time by C
+function. The two views agree; they slice the time differently.
+
+2.4 What the counters show (perf stat, same fixed work)
+-------------------------------------------------------
+  instructions     8.71 billion
+  IPC              2.94 instructions per cycle
+  branch misses    0.37% of branches
+  cache misses     4.3% of a small number of cache references
+The CPU is not waiting for memory and not mispredicting branches. The cost is
+simply the number of instructions the interpreter executes per float
+operation.
+
+2.5 Bottlenecks
+---------------
+1. Reading and writing list elements in the pair loop and the position
+   update (v1[0] -= ..., r[0] += ...): 75 list reads + 75 list writes per
+   step, 20000 steps per call. perf: list indexing 14.8%; py-spy: those lines
+   ~59% of the run time. Each access is several C calls and extra bytecodes,
+   about 2x slower than a local variable.
+2. Unpacking the nested pair tuples/lists in the loop header on every
+   iteration (L80-81, 8.4%).
+3. Float arithmetic and float object creation (32% of C-level time): every
+   + - * dispatches through binary_op1 and allocates a new float. This is
+   inherent to Python floats; pure-Python changes can only reduce the number
+   of operations, not the cost of each one.
+4. The ** operator: pow is only 1.8% of the time. The force line (18.3% in
+   py-spy) is mostly the ordinary float work around it.
+Not a bottleneck: memory, branches, function calls (0.9%).
+
+
+3. OPTIMIZATIONS
+================================================================================
+The original code is kept untouched in nbody/original/. Each change is a
+separate variant (nbody/optimized/<name>/, with its own pyperformance
+MANIFEST), measured on its own. nbody/verify_nbody.py runs the full
+simulation (20000 steps) in every variant and compares the energies and the
+final position and velocity of every body with the original.
+
+3.1 "locals": positions and velocities in local variables   (KEPT)
+-----------------------------------------------------------------
+What: at the start of advance() the 5 bodies' positions and velocities are
+copied into local variables (x0, y0, z0, vx0, ... vz4); all 20000 steps run
+on the locals; at the end the results are written back to the lists once.
+The 10 pairs are written out explicitly, because Python cannot create local
+variables dynamically; for a system that does not have 5 bodies the
+function falls back to the original loop.
+Why it helps: a local variable is one LOAD_FAST/STORE_FAST (an array slot in
+the frame), while v[0] -= x is a type check, an index conversion and a list
+read plus a list write. It also removes the unpacking of the pair tuples on
+every iteration (bottlenecks 1 and 2).
+Output: bit-for-bit identical to the original (same operations, same order).
+Flame graph after the change: list indexing 14.8% -> 0.0%; no single line
+above 3.5% any more, the time is spread over the arithmetic itself.
+
+3.2 "sqrt": replace ** (-1.5) with sqrt                     (DROPPED)
+-----------------------------------------------------------------
+What: mag = dt / (d2 * sqrt(d2)) instead of dt * d2 ** (-1.5)
+(mathematically identical; math.sqrt is a single CPU instruction).
+Result: 1.01x slower on its own, and "locals + sqrt" was slower than
+"locals" alone.
+Why it did not help: in Python the cost is not the math. d2 ** (-1.5) is one
+bytecode that calls C pow directly (86 ns); 1 / (d2 * sqrt(d2)) needs a
+global lookup of sqrt, a function call, a multiply and a divide (93 ns). The
+flame graph already predicted it: pow is only 1.8% of the run time, so even
+removing it completely could save at most ~2%.
+Second attempt: sqrt passed as a default argument (sqrt=sqrt) so it is a
+local (LOAD_FAST) instead of a global lookup: 114 ns vs 121 ns per operation
+in isolation, but for the whole benchmark 143.3 ms vs 143.7 ms, which pyperf
+reports as not significant. Dropped; we kept d2 ** (-1.5).
+Output: differs from the original only by rounding (1.3e-9 relative after
+20000 steps; 0 after 1 step, 2e-16 after 100 steps).
+
+3.3 Considered and not done
+---------------------------
+NumPy: with 5 bodies the cost of each NumPy call is larger than the work it
+would do, so vectorizing would make it slower.
+
+The final optimized version is nbody/optimized/locals.
+
+
+4. PERFORMANCE COMPARISON
+================================================================================
+pyperformance run --rigorous (20 processes x 3 values = 120 values per
+benchmark), after "pyperf system tune" (the VM has one CPU; without tuning
+the spread was too large). Times are per benchmark iteration.
+Raw data: results/*.json. Commands: results/nbody_commands.log.
+
+4.1 Baseline
+------------
+  baseline (results/baseline_rigorous.json):
+    median 231.5 ms (MAD 2.2)   mean 233.5 ± 7.3 ms   min 226.3   P95 243.0
+
+4.2 Each change on its own (one session, results/nbody_*.json)
+-------------------------------------------------------------
+  version    median     MAD   mean ± std          vs original (pyperf)
+  original   230.4 ms   1.6   232.6 ±  7.5 ms     -
+  locals     144.3 ms   1.2   145.5 ±  3.7 ms     1.60x faster
+  sqrt       234.2 ms   1.8   235.4 ±  5.2 ms     1.01x slower
+  both       150.3 ms   1.7   152.6 ±  5.5 ms     1.52x faster (worse than locals)
+
+4.3 sqrt as a local variable (second session, results/nbody_r2_*.json)
+--------------------------------------------------------------------
+  version       median     MAD   mean ± std          vs original
+  original      232.2 ms   2.5   238.8 ± 27.2 ms     -
+  locals        143.7 ms   0.9   144.7 ±  3.1 ms     1.65x faster
+  locals_sqrt   143.3 ms   1.5   144.0 ±  3.2 ms     1.66x faster
+  locals_sqrt vs locals: not significant (pyperf)
+  (the original's std of 27.2 ms comes from a few outliers; its median is
+  as stable as in the first session)
+
+4.4 Result
+----------
+  final optimized (locals): 230.4 ms -> 144.3 ms median
+                            37% less time, 1.60x faster
+  (1.65x in the second session: the result is reproducible)
+  The project asks for at least 7%.
+
+4.5 Counters before and after (perf stat, same fixed work)
+---------------------------------------------------------
+                  original      optimized
+  instructions    8.71 B        5.72 B    (-34%)
+  IPC             2.94          2.95
+  branch misses   0.37%         0.55%
+  cache misses    4.3%          3.2%
+The speedup comes from executing a third fewer instructions for the same
+work, not from better memory or branch behaviour.
+
+
+5. HARDWARE ACCELERATION PROPOSAL
+================================================================================
+Full design documents and code: hw/nbody_accel/
+  docs/design.md          architecture specification
+  docs/performance.md     justification and performance estimate
+  docs/tradeoffs.md       area estimate and trade-offs
+  docs/block_diagram.svg  block diagram
+  rtl/                    Verilog implementation
+  tb/, model/             testbenches and reference models
+  sw/                     host driver
+  run_tests.sh            builds and runs every test
+
+5.1 What is accelerated and why
+-------------------------------
+The whole advance() loop: pair forces, velocity updates and position updates
+for many time steps, with no software involvement between steps.
+- advance() is essentially the whole benchmark (Amdahl's law is on our side).
+- After the software optimization the remaining cost is float arithmetic and
+  float object creation (31% + 20% of C-level time), which only leaving
+  Python can remove; in hardware each float operation is a pipeline stage,
+  with no dispatch and no allocation.
+- The work is fixed and regular (10 pairs per step), the state is tiny
+  (7 doubles per body, 280 bytes), and it goes in and out once per call,
+  not once per step.
+
+5.2 Hardware description
+------------------------
+Verilog (Icarus Verilog 11), hw/nbody_accel/rtl/:
+  fp_add.v, fp_mul.v,       IEEE-754 double operators, round to nearest even
+  fp_div.v, fp_sqrt.v       (latency 3 / 4 / 28 / 28 cycles)
+  pair_force.v              the pair force pipeline
+  nbody_accel_top.v         registers, body state, controller FSM,
+                            velocity accumulator, position update
+Number format: IEEE-754 double, exactly like Python floats, so the results
+are the same as the software. The hardware computes d2 ** (-1.5) as
+1 / (d2 * sqrt(d2)) (mathematically identical; +, -, *, / and sqrt are
+exactly defined by IEEE-754, pow is not): the result is bit-identical to the
+software with the same formula and differs from the original only by
+rounding (1.3e-9 after 20000 steps).
+
+5.3 Inputs and outputs
+----------------------
+  clk          1 bit   in    100 MHz (10 ns)
+  rst_n        1 bit   in    synchronous reset
+  mmio_addr    16 bit  in    register address (PCIe BAR0 offset)
+  mmio_wen     1 bit   in    write strobe
+  mmio_wdata   64 bit  in    write data (one double per register)
+  mmio_ren     1 bit   in    read strobe
+  mmio_rdata   64 bit  out   read data (next cycle)
+  irq_done     1 bit   out   interrupt: run finished
+
+  Register map (64-bit registers, BAR0):
+  0x0000 ID          R    "NBODYACC"
+  0x0008 CTRL        W    bit0 START
+  0x0010 STATUS      R    bit0 BUSY, bit1 DONE
+  0x0018 NUM_BODIES  RW   2..16
+  0x0020 NUM_STEPS   RW   number of time steps
+  0x0028 DT          RW   IEEE-754 double
+  0x0030 STEPS_DONE  R    progress
+  0x0038 CYCLES      R    clock cycles of the last run
+  0x1000 + 0x40*b + 8*f   body b, field f: x, y, z, vx, vy, vz, m
+
+5.4 Hardware architecture
+-------------------------
+Pair force pipeline (81 cycles latency, one new pair per clock cycle; pairs
+are independent within a step because forces depend only on positions):
+  S1  dx, dy, dz = p_i - p_j             3 fp_add
+  S2  dx^2, dy^2, dz^2                   3 fp_mul
+  S3  s = dx^2 + dy^2                    fp_add
+  S4  d2 = s + dz^2                      fp_add
+  S5  r = sqrt(d2)                       fp_sqrt (28 stages)
+  S6  den = d2 * r                       fp_mul
+  S7  mag = dt / den                     fp_div (28 stages)
+  S8  b1m = m_i * mag, b2m = m_j * mag   2 fp_mul
+  S9  6 velocity deltas                  6 fp_mul
+  (delay lines carry dx/dy/dz, masses and d2 alongside)
+Velocity accumulator: 6 fp_add apply each pair's deltas in pair order (a body
+appears in several pairs and float addition is not associative, so the order
+must match the software to keep results exact).
+Position update: 3 fp_mul + 3 fp_add per body (x += dt * vx).
+Controller FSM:
+  IDLE -START-> FEED (pairs into the pipeline, one per cycle) -> DRAIN
+  -> ACC (apply deltas, pair by pair) -> POS (body by body) -> STEP_END
+  -> FEED for the next step, or IDLE with DONE and the interrupt.
+Measured cycles per step: 6P + 11N + 84 (P pairs, N bodies);
+199 cycles = 1.99 us per step for the benchmark.
+
+5.5 Block diagram
+-----------------
+(docs/block_diagram.svg has the drawn version)
+
+ HOST (CPU)                              ACCELERATOR CARD (FPGA), 100 MHz
++-------------------------+            +-------------------------------------+
+| Python benchmark        |            | PCIe endpoint (vendor IP)           |
+|   advance(dt, n, ...)   |            |   | MMIO bus: addr 16, data 64      |
+|          |              |            |   v                                 |
+| nbody_accel_driver.py   |            | registers + body state (16 bodies)  |
+|  device present?        |            |   |        ^                        |
+|   no  -> software       |   PCIe     |   | START  | new v, positions       |
+|   yes -> write regs,    |<==========>|   v        |                        |
+|          START, wait,   |   BAR0     | controller FSM (step/pair/body)     |
+|          read back      |            |   |                                 |
+|          |              |            |   v                                 |
+| OS: mmap BAR0, IOMMU,   |            | pair_force pipeline (81 cycles)     |
+|     interrupt           |            |   v                                 |
++-------------------------+            | result buffer -> accumulator (6 add)|
+                                       |               -> position update    |
+                                       | irq_done ---------------> host      |
+                                       +-------------------------------------+
+
+5.6 Hardware/software interface
+-------------------------------
+hw/nbody_accel/sw/nbody_accel_driver.py:
+    advance = accelerated(advance)     # wraps the benchmark's own function
+    advance(0.01, 20000)               # called exactly like before
+- With a card: writes NUM_BODIES, NUM_STEPS, DT and the 35 body values to
+  the registers (PCIe BAR0, memory-mapped through sysfs), sets START, waits
+  for DONE (polling STATUS or the interrupt), reads positions and velocities
+  back into the same Python lists. 70 register operations per call,
+  independent of the number of steps.
+- Without a card (or more than 16 bodies): runs the software advance()
+  unchanged, so the benchmark never breaks and the only software change is
+  inside this library.
+- For large systems a DMA transfer of one host buffer would replace the
+  per-register accesses.
+
+5.7 Verification
+----------------
+- FP operators: 274,014 random and edge-case vectors against Python's
+  IEEE-754 results, bit for bit, 0 errors.
+- Whole accelerator, driven only through its registers: real benchmark
+  bodies and 2, 3 and 16 bodies, all bit-identical to the software with the
+  same formula, including a full advance(0.01, 20000): 3,980,000 cycles.
+- Driver: fallback bit-identical to the original; offload bit-identical
+  through a register-level model.
+
+5.8 Acceleration justification and estimated improvement
+--------------------------------------------------------
+From measured numbers (hw/nbody_accel/model/estimate_speedup.py):
+  software, original       232.2 ms per iteration   11.61 us per step
+  software, optimized      143.7 ms                  7.19 us per step
+  accelerator compute      20000 x 199 cycles x 10 ns = 39.8 ms
+  host overhead            1.2 ms (70 PCIe register accesses at 10 us each
+                           + one polling interval)
+  accelerator total        41.0 ms
+  estimated speedup        5.7x vs the original, 3.5x vs the optimized code
+Assumptions: 100 MHz is met with the chosen pipeline depths (not
+synthesized); 10 us per register access (pessimistic, typically ~1 us);
+report_energy() stays in software; the FPGA is configured once and ready.
+The fixed PCIe cost is paid once per call, so offloading pays off above
+~125 steps per call (vs original) / ~230 (vs optimized); the benchmark does
+20000. With more bodies the advantage grows (estimated 1.3x at 2 bodies,
+3.6x at 5, 5.1x at 8, 6.6x at 16, vs optimized software).
+
+5.9 Performance / area / frequency / power trade-offs
+-----------------------------------------------------
+Area estimate (not synthesized): 14 fp_add, 15 fp_mul, 1 fp_div, 1 fp_sqrt,
+~35k LUTs, ~120 DSP blocks, ~40-60k flip-flops: fits a mid-range FPGA.
+Our analysis:
+- IEEE double vs fixed point: we chose double because the results stay
+  exactly like the software; fixed point would be smaller and use less power
+  but the results drift over many steps.
+- Div and sqrt at 2 bits per stage at 100 MHz is our balance: 1 bit per
+  stage (~150 MHz, 1.70 us per step) needs about twice the registers and
+  more power; 4 bits per stage (~50 MHz, 3.4 us per step) is smaller but the
+  clock drops a lot.
+- The accumulation has to stay in pair order to keep the results exact.
+- Running the position update for all bodies in parallel would save about
+  20% of the cycles but costs 5x the area of that block; a second pair
+  pipeline does not help much, because the latency is the problem, not the
+  throughput.
+- For small systems we use MMIO registers; for big systems DMA would be
+  better.
+- The card only pays off when there are many steps per call, because of the
+  fixed PCIe cost.
+- Power: the CPU core is busy for the whole software run while the card
+  finishes about 5x faster, so the energy per run should drop even though
+  the FPGA adds its own power, assuming the FPGA is set up and ready
+  (loading its design for every call would cancel the benefit).
+
+
+6. CONCLUSION
+================================================================================
+- The flame graphs and the perf report show that nbody's time is not the
+  gravity math: it is the interpreter's overhead around it, in particular
+  list element reads and writes (14.8% in C, ~59% of the Python lines),
+  plus float dispatch and float object creation.
+- Moving positions and velocities into local variables for the whole
+  advance() call made the benchmark 1.60x faster (230.4 -> 144.3 ms median,
+  37% less time, well above the 7% target), with bit-identical output, by
+  executing 34% fewer instructions.
+- Replacing ** with sqrt did not help and was dropped: pow was only 1.8% of
+  the time and calling sqrt from Python costs more than it saves. Profiling
+  predicted this before we measured it.
+- What remains after the optimization, float arithmetic and float objects,
+  cannot be removed in Python. The proposed accelerator runs the whole
+  advance() loop in IEEE-754 double hardware (81-cycle pipeline, 199 cycles
+  per step at 100 MHz). It is implemented in Verilog and verified bit for bit
+  against the benchmark, including a full 20000-step call, and is estimated
+  at 5.7x faster than the original software (3.5x faster than our optimized
+  version) including the PCIe overhead, as long as a call has more than a few
+  hundred steps.
