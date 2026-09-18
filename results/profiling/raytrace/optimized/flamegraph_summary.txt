@@ -1,0 +1,38 @@
+total weight: 76168168092 (sample periods)
+
+top 20 frames by self time (flame graph leaf width):
+   34.08%  _PyEval_EvalFrameDefault
+    3.25%  binary_op1
+    2.93%  call_function
+    2.66%  frame_dealloc
+    2.37%  _PyEval_MakeFrameVector
+    2.25%  PyTuple_GetItem
+    1.78%  PyFloat_FromDouble
+    1.72%  float_dealloc
+    1.66%  lookdict_unicode_nodummy
+    1.54%  _PyObject_VectorcallTstate
+    1.41%  _PyType_Lookup
+    1.38%  _PyObject_GetMethod
+    1.29%  _PyMem_DebugCheckAddress
+    1.28%  float_mul
+    1.17%  PyType_IsSubtype
+    1.10%  _Py_NewReference
+    0.96%  read_size_t
+    0.96%  _PyDict_GetItemHint
+    0.95%  float_add
+    0.91%  pthread_getspecific@@GLIBC_2.34
+
+self time by category:
+   34.08%  interpreter loop (bytecode dispatch)
+   16.26%  function calls (frames, call setup)
+   10.82%  attribute / dict lookups (instance __dict__)
+   10.12%  other
+    9.61%  debug-build checks (python3-dbg only)
+    7.85%  float arithmetic
+    6.10%  float objects (create/free)
+    1.92%  memory allocator / GC
+    1.39%  object creation (instances)
+    0.86%  iteration
+    0.51%  kernel / unresolved
+    0.44%  list indexing (get/set item)
+    0.04%  math library (libm)

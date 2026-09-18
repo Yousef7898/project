@@ -1,0 +1,23 @@
+# started on Thu Sep 17 14:10:53 2026
+
+
+ Performance counter stats for 'python3 /project/profiling/workload.py raytrace /project/raytrace/original/run_benchmark.py 5' (5 runs):
+
+        9725743663      cycles                                                        ( +-  0.22% )
+       25493680833      instructions              #    2.60  insn per cycle           ( +-  0.07% )
+        4904727274      branches                                                      ( +-  0.08% )
+          15731480      branch-misses             #    0.32% of all branches          ( +-  1.45% )
+
+             4.557 +- 0.157 seconds time elapsed  ( +-  3.45% )
+
+# started on Thu Sep 17 14:11:16 2026
+
+
+ Performance counter stats for 'python3 /project/profiling/workload.py raytrace /project/raytrace/original/run_benchmark.py 5' (5 runs):
+
+          18721921      cache-references                                              ( +-  3.26% )
+            192143      cache-misses              #    1.008 % of all cache refs      ( +-  8.90% )
+              2833      page-faults                                                   ( +-  0.04% )
+
+            4.2342 +- 0.0333 seconds time elapsed  ( +-  0.79% )
+

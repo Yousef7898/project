@@ -1,0 +1,23 @@
+# started on Thu Sep 17 14:01:31 2026
+
+
+ Performance counter stats for 'python3 /project/profiling/workload.py nbody /project/nbody/original/run_benchmark.py 5' (5 runs):
+
+        2951285379      cycles                                                        ( +-  0.39% )
+        8708381913      instructions              #    2.94  insn per cycle           ( +-  0.01% )
+        1499337040      branches                                                      ( +-  0.02% )
+           5609499      branch-misses             #    0.37% of all branches          ( +-  8.23% )
+
+            1.2797 +- 0.0109 seconds time elapsed  ( +-  0.85% )
+
+# started on Thu Sep 17 14:01:38 2026
+
+
+ Performance counter stats for 'python3 /project/profiling/workload.py nbody /project/nbody/original/run_benchmark.py 5' (5 runs):
+
+           5246827      cache-references                                              ( +-  0.35% )
+            223065      cache-misses              #    4.307 % of all cache refs      ( +-  6.09% )
+              2736      page-faults                                                   ( +-  0.02% )
+
+           1.27952 +- 0.00434 seconds time elapsed  ( +-  0.34% )
+
